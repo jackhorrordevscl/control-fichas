@@ -9,7 +9,7 @@ async function bootstrap() {
   app.use(helmet());
 
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    origin: ['http://localhost:5173', 'http://192.168.1.183:5173'],
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     credentials: true,
   });
@@ -24,7 +24,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
 
-  await app.listen(3001);
+  await app.listen(3001, '0.0.0.0');
   console.log(`🚀 Servidor corriendo en: http://localhost:3001/api/v1`);
 }
 
