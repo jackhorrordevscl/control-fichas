@@ -1,0 +1,112 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import PDFDocument = require('pdfkit');
+
+@Injectable()
+export class ReportsService {
+  constructor(private prisma: PrismaService) {}
+
+  async generatePatientReport(patientId: string): Promise<Buffer> {
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      include: {
+        consultations: {
+          orderBy: { createdAt: 'asc' },
+        },
+        therapist: {
+          select: { name: true, email: true },
+        },
+      },
+    });
+
+    if (!patient) {
+      throw new NotFoundException('Paciente no encontrado');
+    }
+
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 50 });
+      const buffers: Buffer[] = [];
+
+      doc.on('data', (chunk) => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', reject);
+
+      // ── ENCABEZADO ──────────────────────────────────────
+      doc
+        .fontSize(20)
+        .font('Helvetica-Bold')
+        .text('UMBRAL SpA', { align: 'center' });
+
+      doc
+        .fontSize(12)
+        .font('Helvetica')
+        .text('Ficha Clínica del Paciente', { align: 'center' });
+
+      doc
+        .fontSize(10)
+        .text(`Generado el: ${new Date().toLocaleDateString('es-CL')}`, {
+          align: 'center',
+        });
+
+      doc.moveDown(2);
+
+      // ── DATOS DEL PACIENTE ───────────────────────────────
+      doc.fontSize(14).font('Helvetica-Bold').text('1. Identificación del Paciente');
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(0.5);
+
+      doc.fontSize(10).font('Helvetica');
+      doc.text(`Nombre completo: ${patient.fullName}`);
+      doc.text(`RUT: ${patient.rut}`);
+      doc.text(`Fecha de nacimiento: ${new Date(patient.birthDate).toLocaleDateString('es-CL')}`);
+      doc.text(`Ocupación: ${patient.occupation ?? 'No registrada'}`);
+      doc.text(`Teléfono: ${patient.phone ?? 'No registrado'}`);
+      doc.text(`Email: ${patient.email ?? 'No registrado'}`);
+      doc.text(`Dirección: ${patient.address ?? 'No registrada'}`);
+
+      doc.moveDown();
+      doc.text(`Contacto de emergencia: ${patient.emergencyContactName ?? 'No registrado'}`);
+      doc.text(`Teléfono emergencia: ${patient.emergencyContactPhone ?? 'No registrado'}`);
+
+      doc.moveDown();
+      doc.text(`Psiquiatra tratante: ${patient.treatingPsychiatrist ?? 'No registrado'}`);
+      doc.text(`Médico tratante: ${patient.treatingDoctor ?? 'No registrado'}`);
+
+      doc.moveDown();
+      doc.text(`Consentimiento informado: ${patient.consentSigned ? 'Firmado' : 'Pendiente'}`);
+      doc.text(`Acuerdo telemedicina: ${patient.telemedConsentSigned ? 'Firmado' : 'Pendiente'}`);
+
+      doc.moveDown(2);
+
+      // ── HISTORIAL CLÍNICO ────────────────────────────────
+      doc.fontSize(14).font('Helvetica-Bold').text('2. Historial Clínico');
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(0.5);
+
+      if (patient.consultations.length === 0) {
+        doc.fontSize(10).font('Helvetica').text('Sin consultas registradas.');
+      } else {
+        patient.consultations.forEach((c, index) => {
+          doc.fontSize(11).font('Helvetica-Bold')
+            .text(`Sesión ${index + 1} — ${new Date(c.sessionDate).toLocaleDateString('es-CL')} (v${c.version}${c.isCorrected ? ' - CORREGIDA' : ''})`);
+
+          doc.fontSize(10).font('Helvetica');
+          doc.text(`Tipo: ${c.sessionType === 'IN_PERSON' ? 'Presencial' : 'Telemedicina'}`);
+          doc.text(`Motivo de consulta: ${c.consultReason}`);
+          doc.text(`Intervención: ${c.intervention}`);
+          doc.text(`Acuerdos: ${c.agreements ?? 'Ninguno'}`);
+          doc.text(`Próxima sesión: ${c.nextSessionDate ? new Date(c.nextSessionDate).toLocaleDateString('es-CL') : 'No agendada'}`);
+          doc.moveDown();
+        });
+      }
+
+      // ── PIE DE PÁGINA ────────────────────────────────────
+      doc.moveDown(2);
+      doc.fontSize(9).font('Helvetica')
+        .text('Documento generado por Umbral SpA — Confidencial', { align: 'center' });
+      doc.text('Ley 20.584 — Custodia obligatoria 15 años', { align: 'center' });
+
+      doc.end();
+    });
+  }
+}

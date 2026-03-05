@@ -1,0 +1,130 @@
+
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  role          Role      @default(THERAPIST)
+  mfaSecret     String?
+  mfaEnabled    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  patients      Patient[]
+  consultations Consultation[]
+  auditLogs     AuditLog[]
+}
+
+enum Role {
+  ADMIN
+  THERAPIST
+}
+
+model Patient {
+  id                    String    @id @default(uuid())
+  fullName              String
+  rut                   String    @unique
+  birthDate             DateTime
+  occupation            String?
+  address               String?
+  phone                 String?
+  email                 String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  treatingPsychiatrist  String?
+  treatingDoctor        String?
+  isActive              Boolean   @default(true)
+  deletedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  consentSigned         Boolean   @default(false)
+  telemedConsentSigned  Boolean   @default(false)
+
+  therapistId    String
+  therapist      User               @relation(fields: [therapistId], references: [id])
+  consultations  Consultation[]
+  documents      PatientDocument[]
+}
+
+model PatientDocument {
+  id          String       @id @default(uuid())
+  patientId   String
+  patient     Patient      @relation(fields: [patientId], references: [id])
+  type        DocumentType
+  fileName    String
+  storagePath String
+  uploadedAt  DateTime     @default(now())
+  uploadedBy  String
+}
+
+enum DocumentType {
+  INFORMED_CONSENT
+  TELEMED_AGREEMENT
+  PATIENT_REPORT
+  OTHER
+}
+
+model Consultation {
+  id                String      @id @default(uuid())
+  patientId         String
+  patient           Patient     @relation(fields: [patientId], references: [id])
+  therapistId       String
+  therapist         User        @relation(fields: [therapistId], references: [id])
+  sessionDate       DateTime
+  consultReason     String
+  intervention      String
+  agreements        String?
+  nextSessionDate   DateTime?
+  sessionType       SessionType @default(IN_PERSON)
+  version           Int         @default(1)
+  previousVersionId String?
+  isCorrected       Boolean     @default(false)
+  createdAt         DateTime    @default(now())
+}
+
+enum SessionType {
+  IN_PERSON
+  TELEMED
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  action     AuditAction
+  resource   String
+  resourceId String
+  detail     String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  VIEW
+  CREATE
+  UPDATE
+  SOFT_DELETE
+  EXPORT_PDF
+  DOCUMENT_UPLOAD
+  MFA_ENABLED
+  MFA_FAILED
+}

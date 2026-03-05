@@ -1,0 +1,122 @@
+import { useQuery } from '@tanstack/react-query';
+import { Users, ClipboardList, FileText, Calendar } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import api from '../api/client';
+
+export default function DashboardPage() {
+  const { user } = useAuth();
+
+  const { data: patients = [] } = useQuery({
+    queryKey: ['patients'],
+    queryFn: () => api.get('/patients').then(r => r.data),
+  });
+
+  const { data: consultations = [] } = useQuery({
+    queryKey: ['consultations-all'],
+    queryFn: () => api.get('/patients').then(async (r) => {
+      const all = await Promise.all(
+        r.data.map((p: any) =>
+          api.get(`/consultations/patient/${p.id}`).then(c => c.data)
+        )
+      );
+      return all.flat();
+    }),
+  });
+
+  const stats = [
+    {
+      label: 'Pacientes activos',
+      value: patients.length,
+      icon: Users,
+      color: 'text-sage-600',
+      bg: 'bg-sage-50',
+    },
+    {
+      label: 'Consultas registradas',
+      value: consultations.length,
+      icon: ClipboardList,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+      
+    },
+    {
+      label: 'Consentimientos firmados',
+      value: patients.filter((p: any) => p.consentSigned).length,
+      icon: FileText,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
+    },
+    {
+      label: 'Próximas sesiones',
+      value: consultations.filter((c: any) =>
+        c.nextSessionDate && new Date(c.nextSessionDate) >= new Date()
+      ).length,
+      icon: Calendar,
+      color: 'text-amber-600',
+      bg: 'bg-amber-50',
+    },
+  ];
+
+  return (
+    <div className="p-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h2 className="font-display text-3xl text-slate-900">Dashboard</h2>
+        <p className="text-slate-500 text-sm mt-1">
+          Bienvenida, {user?.email} — {new Date().toLocaleDateString('es-CL', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+          })}
+        </p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        {stats.map((stat) => (
+          <div key={stat.label} className="card flex items-center gap-4">
+            <div className={`${stat.bg} p-3 rounded-lg`}>
+              <stat.icon size={22} className={stat.color} />
+            </div>
+            <div>
+              <p className="text-2xl font-display text-slate-900">{stat.value}</p>
+              <p className="text-xs text-slate-500">{stat.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Pacientes recientes */}
+      <div className="card">
+        <h3 className="font-display text-xl text-slate-900 mb-4">
+          Pacientes recientes
+        </h3>
+        {patients.length === 0 ? (
+          <p className="text-slate-400 text-sm text-center py-8">
+            No hay pacientes registrados aún.
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {patients.slice(0, 5).map((p: any) => (
+              <div key={p.id} className="py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-800">{p.fullName}</p>
+                  <p className="text-xs text-slate-400">{p.rut}</p>
+                </div>
+                <div className="flex gap-2">
+                  {p.consentSigned ? (
+                    <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">
+                      Consentimiento ✓
+                    </span>
+                  ) : (
+                    <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-full">
+                      Sin consentimiento
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
