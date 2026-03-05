@@ -1,58 +1,76 @@
+import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, ClipboardList, LogOut } from 'lucide-react';
+import {
+  LayoutDashboard, Users, ClipboardList,
+  LogOut, ShieldCheck, Menu, X
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
+  const navLinks = [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/patients', icon: Users, label: 'Pacientes' },
+    { to: '/consultations', icon: ClipboardList, label: 'Consultas' },
+    { to: '/settings', icon: ShieldCheck, label: 'Seguridad' },
+  ];
+
   return (
     <div className="flex h-screen bg-cream-100">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 flex flex-col">
 
+      {/* Overlay móvil */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`
+        fixed lg:static inset-y-0 left-0 z-30
+        w-64 bg-slate-900 flex flex-col
+        transform transition-transform duration-300
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        lg:translate-x-0
+      `}>
         {/* Logo */}
-        <div className="px-6 py-8 border-b border-slate-800">
-          <h1 className="font-display text-2xl text-white">Umbral</h1>
-          <p className="text-slate-400 text-xs mt-1">Gestión Clínica</p>
+        <div className="px-6 py-8 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h1 className="font-display text-2xl text-white">Umbral</h1>
+            <p className="text-slate-400 text-xs mt-1">Gestión Clínica</p>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden text-slate-400 hover:text-white"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* Navegación */}
         <nav className="flex-1 px-3 py-6 space-y-1">
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) =>
-              `sidebar-link ${isActive ? 'active' : ''}`
-            }
-          >
-            <LayoutDashboard size={18} />
-            Dashboard
-          </NavLink>
-
-          <NavLink
-            to="/patients"
-            className={({ isActive }) =>
-              `sidebar-link ${isActive ? 'active' : ''}`
-            }
-          >
-            <Users size={18} />
-            Pacientes
-          </NavLink>
-
-          <NavLink
-            to="/consultations"
-            className={({ isActive }) =>
-              `sidebar-link ${isActive ? 'active' : ''}`
-            }
-          >
-            <ClipboardList size={18} />
-            Consultas
-          </NavLink>
+          {navLinks.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={() => setSidebarOpen(false)}
+              className={({ isActive }) =>
+                `sidebar-link ${isActive ? 'active' : ''}`
+              }
+            >
+              <Icon size={18} />
+              {label}
+            </NavLink>
+          ))}
         </nav>
 
         {/* Usuario y logout */}
@@ -72,9 +90,23 @@ export default function Layout() {
       </aside>
 
       {/* Contenido principal */}
-      <main className="flex-1 overflow-auto">
-        <Outlet />
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+
+        {/* Topbar móvil */}
+        <header className="lg:hidden bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="text-slate-600 hover:text-slate-900"
+          >
+            <Menu size={22} />
+          </button>
+          <h1 className="font-display text-xl text-slate-900">Umbral</h1>
+        </header>
+
+        <main className="flex-1 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

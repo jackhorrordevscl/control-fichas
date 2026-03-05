@@ -18,6 +18,9 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [userId, setUserId] = useState('');
+  const [mfaToken, setMfaToken] = useState('');
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -28,7 +31,10 @@ export default function LoginPage() {
     setError('');
     try {
       const res = await api.post('/auth/login', data);
-      if (res.data.accessToken) {
+      if (res.data.requiresMfa) {
+        setMfaRequired(true);
+        setUserId(res.data.userId);
+      } else if (res.data.accessToken) {
         login(res.data.accessToken, res.data.user);
         navigate('/dashboard');
       }
@@ -39,6 +45,60 @@ export default function LoginPage() {
     }
   };
 
+  const onMfaSubmit = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/mfa/verify', {
+        userId,
+        token: mfaToken,
+      });
+      login(res.data.accessToken, res.data.user);
+      navigate('/dashboard');
+    } catch {
+      setError('Código MFA inválido. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Pantalla MFA
+  if (mfaRequired) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-8">
+        <div className="bg-cream-50 rounded-2xl p-8 w-full max-w-md">
+          <h2 className="font-display text-3xl text-slate-900 mb-2">
+            Verificación MFA
+          </h2>
+          <p className="text-slate-500 text-sm mb-6">
+            Ingresa el código de 6 dígitos de tu app autenticadora
+          </p>
+          <input
+            type="text"
+            maxLength={6}
+            placeholder="000000"
+            value={mfaToken}
+            onChange={e => setMfaToken(e.target.value)}
+            className="input-field text-center text-2xl tracking-widest mb-4"
+          />
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )}
+          <button
+            onClick={onMfaSubmit}
+            disabled={loading || mfaToken.length !== 6}
+            className="btn-primary w-full py-3 text-base disabled:opacity-50"
+          >
+            {loading ? 'Verificando...' : 'Verificar'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Pantalla Login normal
   return (
     <div className="min-h-screen bg-slate-900 flex">
 

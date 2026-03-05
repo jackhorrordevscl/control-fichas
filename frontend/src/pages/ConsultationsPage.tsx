@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ClipboardPlus, Search } from 'lucide-react';
+import { ClipboardPlus, Search, X, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../api/client';
 
 interface Consultation {
@@ -28,13 +28,10 @@ export default function ConsultationsPage() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState('');
+  const [showPatientList, setShowPatientList] = useState(true);
   const [form, setForm] = useState({
-    patientId: '',
-    sessionDate: '',
-    consultReason: '',
-    intervention: '',
-    agreements: '',
-    nextSessionDate: '',
+    patientId: '', sessionDate: '', consultReason: '',
+    intervention: '', agreements: '', nextSessionDate: '',
     sessionType: 'IN_PERSON',
   });
 
@@ -69,24 +66,32 @@ export default function ConsultationsPage() {
     p.rut.includes(search)
   );
 
+  const selectedPatient = patients.find((p: Patient) => p.id === selectedPatientId);
+
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6 md:mb-8">
         <div>
-          <h2 className="font-display text-3xl text-slate-900">Consultas</h2>
+          <h2 className="font-display text-2xl md:text-3xl text-slate-900">Consultas</h2>
           <p className="text-slate-500 text-sm mt-1">Registro clínico de sesiones</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2">
           <ClipboardPlus size={16} />
-          Nueva consulta
+          <span className="hidden sm:inline">Nueva consulta</span>
+          <span className="sm:hidden">Nueva</span>
         </button>
       </div>
 
       {/* Formulario nueva consulta */}
       {showForm && (
         <div className="card mb-6">
-          <h3 className="font-display text-xl text-slate-900 mb-4">Registrar Sesión</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-display text-xl text-slate-900">Registrar Sesión</h3>
+            <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">
+              <X size={20} />
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1">Paciente *</label>
@@ -142,50 +147,72 @@ export default function ConsultationsPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Lista de pacientes */}
+        {/* Lista de pacientes — colapsable en móvil */}
         <div className="card p-0 overflow-hidden">
-          <div className="p-4 border-b border-slate-100">
-            <p className="font-medium text-slate-700 text-sm mb-3">Seleccionar paciente</p>
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input className="input-field pl-8 text-xs" placeholder="Buscar..."
-                value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
-          </div>
-          <div className="divide-y divide-slate-50 max-h-96 overflow-auto">
-            {filteredPatients.map((p: Patient) => (
-              <button key={p.id} onClick={() => setSelectedPatientId(p.id)}
-                className={`w-full text-left px-4 py-3 hover:bg-cream-50 transition-colors ${
-                  selectedPatientId === p.id ? 'bg-sage-50 border-l-2 border-sage-500' : ''
-                }`}>
-                <p className="text-sm font-medium text-slate-800">{p.fullName}</p>
-                <p className="text-xs text-slate-400">{p.rut}</p>
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setShowPatientList(!showPatientList)}
+            className="w-full p-4 border-b border-slate-100 flex items-center justify-between text-left"
+          >
+            <p className="font-medium text-slate-700 text-sm">
+              {selectedPatient ? selectedPatient.fullName : 'Seleccionar paciente'}
+            </p>
+            {showPatientList
+              ? <ChevronUp size={16} className="text-slate-400" />
+              : <ChevronDown size={16} className="text-slate-400" />
+            }
+          </button>
+
+          {showPatientList && (
+            <>
+              <div className="p-3 border-b border-slate-100">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input className="input-field pl-8 text-xs" placeholder="Buscar..."
+                    value={search} onChange={e => setSearch(e.target.value)} />
+                </div>
+              </div>
+              <div className="divide-y divide-slate-50 max-h-64 lg:max-h-96 overflow-auto">
+                {filteredPatients.map((p: Patient) => (
+                  <button key={p.id}
+                    onClick={() => {
+                      setSelectedPatientId(p.id);
+                      setShowPatientList(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 hover:bg-cream-50 transition-colors ${
+                      selectedPatientId === p.id ? 'bg-sage-50 border-l-2 border-sage-500' : ''
+                    }`}>
+                    <p className="text-sm font-medium text-slate-800">{p.fullName}</p>
+                    <p className="text-xs text-slate-400">{p.rut}</p>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Historial de consultas */}
         <div className="lg:col-span-2 space-y-4">
           {!selectedPatientId ? (
             <div className="card flex items-center justify-center h-48">
-              <p className="text-slate-400 text-sm">Selecciona un paciente para ver su historial</p>
+              <p className="text-slate-400 text-sm text-center px-4">
+                Selecciona un paciente para ver su historial
+              </p>
             </div>
           ) : consultations.length === 0 ? (
             <div className="card flex items-center justify-center h-48">
-              <p className="text-slate-400 text-sm">Sin consultas registradas para este paciente</p>
+              <p className="text-slate-400 text-sm">Sin consultas registradas</p>
             </div>
           ) : (
             consultations.map((c: Consultation) => (
               <div key={c.id} className={`card ${c.isCorrected ? 'opacity-60 border-dashed' : ''}`}>
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <p className="font-medium text-slate-800">
+                    <p className="font-medium text-slate-800 text-sm md:text-base">
                       {new Date(c.sessionDate).toLocaleDateString('es-CL', {
                         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
                       })}
                     </p>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex flex-wrap gap-2 mt-1">
                       <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
                         v{c.version}
                       </span>

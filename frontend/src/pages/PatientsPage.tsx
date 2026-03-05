@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, Search, Download, Trash2, Eye } from 'lucide-react';
+import { UserPlus, Search, Download, Trash2, Eye, X } from 'lucide-react';
 import api from '../api/client';
 
 interface Patient {
@@ -73,23 +73,29 @@ export default function PatientsPage() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6 md:mb-8">
         <div>
-          <h2 className="font-display text-3xl text-slate-900">Pacientes</h2>
+          <h2 className="font-display text-2xl md:text-3xl text-slate-900">Pacientes</h2>
           <p className="text-slate-500 text-sm mt-1">{patients.length} pacientes registrados</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2">
           <UserPlus size={16} />
-          Nuevo paciente
+          <span className="hidden sm:inline">Nuevo paciente</span>
+          <span className="sm:hidden">Nuevo</span>
         </button>
       </div>
 
       {/* Formulario nuevo paciente */}
       {showForm && (
         <div className="card mb-6">
-          <h3 className="font-display text-xl text-slate-900 mb-4">Nueva Ficha</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-display text-xl text-slate-900">Nueva Ficha</h3>
+            <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">
+              <X size={20} />
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Nombre completo *</label>
@@ -141,18 +147,18 @@ export default function PatientsPage() {
               <input className="input-field" value={form.treatingPsychiatrist}
                 onChange={e => setForm({ ...form, treatingPsychiatrist: e.target.value })} />
             </div>
-            <div className="flex items-center gap-6 pt-4">
+            <div className="flex items-center gap-6 pt-2">
               <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                 <input type="checkbox" checked={form.consentSigned}
                   onChange={e => setForm({ ...form, consentSigned: e.target.checked })}
                   className="rounded" />
-                Consentimiento firmado
+                Consentimiento
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                 <input type="checkbox" checked={form.telemedConsentSigned}
                   onChange={e => setForm({ ...form, telemedConsentSigned: e.target.checked })}
                   className="rounded" />
-                Acuerdo telemedicina
+                Telemedicina
               </label>
             </div>
           </div>
@@ -172,8 +178,8 @@ export default function PatientsPage() {
           value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      {/* Lista */}
-      <div className="card p-0 overflow-hidden">
+      {/* Lista — tabla en desktop, cards en móvil */}
+      <div className="hidden md:block card p-0 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
@@ -202,9 +208,7 @@ export default function PatientsPage() {
                   <td className="px-6 py-4 text-slate-600">{p.phone}</td>
                   <td className="px-6 py-4">
                     <span className={`text-xs px-2 py-1 rounded-full ${
-                      p.consentSigned
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-amber-50 text-amber-700'
+                      p.consentSigned ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                     }`}>
                       {p.consentSigned ? 'Consentimiento ✓' : 'Sin consentimiento'}
                     </span>
@@ -232,17 +236,57 @@ export default function PatientsPage() {
         </table>
       </div>
 
+      {/* Cards móvil */}
+      <div className="md:hidden space-y-3">
+        {filtered.length === 0 ? (
+          <div className="card text-center py-8 text-slate-400 text-sm">
+            No se encontraron pacientes.
+          </div>
+        ) : (
+          filtered.map((p: Patient) => (
+            <div key={p.id} className="card p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <p className="font-medium text-slate-800">{p.fullName}</p>
+                  <p className="text-xs text-slate-400">{p.rut}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full shrink-0 ${
+                  p.consentSigned ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                }`}>
+                  {p.consentSigned ? '✓' : 'Pendiente'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">{p.phone} · {p.email}</p>
+              <div className="flex gap-2">
+                <button onClick={() => setSelected(p)} className="btn-secondary text-xs py-1 flex items-center gap-1">
+                  <Eye size={13} /> Ver
+                </button>
+                <button onClick={() => handleDownload(p.id)} className="btn-primary text-xs py-1 flex items-center gap-1">
+                  <Download size={13} /> PDF
+                </button>
+                <button onClick={() => deleteMutation.mutate(p.id)}
+                  className="text-xs py-1 px-2 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 flex items-center gap-1">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
       {/* Modal detalle */}
       {selected && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-auto">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="font-display text-2xl text-slate-900">{selected.fullName}</h3>
                 <p className="text-slate-400 text-sm">{selected.rut}</p>
               </div>
               <button onClick={() => setSelected(null)}
-                className="text-slate-400 hover:text-slate-600 text-xl font-light">✕</button>
+                className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
             </div>
             <div className="space-y-2 text-sm text-slate-700">
               <p><span className="font-medium">Nacimiento:</span> {new Date(selected.birthDate).toLocaleDateString('es-CL')}</p>
@@ -257,7 +301,7 @@ export default function PatientsPage() {
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => handleDownload(selected.id)} className="btn-primary flex items-center gap-2">
-                <Download size={14} /> Descargar ficha PDF
+                <Download size={14} /> Descargar PDF
               </button>
               <button onClick={() => setSelected(null)} className="btn-secondary">Cerrar</button>
             </div>

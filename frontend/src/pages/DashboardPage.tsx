@@ -37,7 +37,6 @@ export default function DashboardPage() {
       icon: ClipboardList,
       color: 'text-blue-600',
       bg: 'bg-blue-50',
-      
     },
     {
       label: 'Consentimientos firmados',
@@ -58,10 +57,10 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h2 className="font-display text-3xl text-slate-900">Dashboard</h2>
+      <div className="mb-6 md:mb-8">
+        <h2 className="font-display text-2xl md:text-3xl text-slate-900">Dashboard</h2>
         <p className="text-slate-500 text-sm mt-1">
           Bienvenida, {user?.email} — {new Date().toLocaleDateString('es-CL', {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -70,23 +69,23 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5 mb-6 md:mb-8">
         {stats.map((stat) => (
-          <div key={stat.label} className="card flex items-center gap-4">
-            <div className={`${stat.bg} p-3 rounded-lg`}>
-              <stat.icon size={22} className={stat.color} />
+          <div key={stat.label} className="card flex items-center gap-3 p-4 md:p-6">
+            <div className={`${stat.bg} p-2 md:p-3 rounded-lg shrink-0`}>
+              <stat.icon size={18} className={stat.color} />
             </div>
-            <div>
-              <p className="text-2xl font-display text-slate-900">{stat.value}</p>
-              <p className="text-xs text-slate-500">{stat.label}</p>
+            <div className="min-w-0">
+              <p className="text-xl md:text-2xl font-display text-slate-900">{stat.value}</p>
+              <p className="text-xs text-slate-500 truncate">{stat.label}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* Pacientes recientes */}
-      <div className="card">
-        <h3 className="font-display text-xl text-slate-900 mb-4">
+      <div className="card p-4 md:p-6">
+        <h3 className="font-display text-lg md:text-xl text-slate-900 mb-4">
           Pacientes recientes
         </h3>
         {patients.length === 0 ? (
@@ -96,19 +95,19 @@ export default function DashboardPage() {
         ) : (
           <div className="divide-y divide-slate-100">
             {patients.slice(0, 5).map((p: any) => (
-              <div key={p.id} className="py-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-800">{p.fullName}</p>
+              <div key={p.id} className="py-3 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 truncate">{p.fullName}</p>
                   <p className="text-xs text-slate-400">{p.rut}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="shrink-0">
                   {p.consentSigned ? (
                     <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">
-                      Consentimiento ✓
+                      ✓
                     </span>
                   ) : (
                     <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-full">
-                      Sin consentimiento
+                      Pendiente
                     </span>
                   )}
                 </div>
