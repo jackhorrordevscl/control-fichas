@@ -62,7 +62,7 @@ export default function DashboardPage() {
       <div className="mb-6 md:mb-8">
         <h2 className="font-display text-2xl md:text-3xl text-slate-900">Dashboard</h2>
         <p className="text-slate-500 text-sm mt-1">
-          Bienvenida, {user?.email} — {new Date().toLocaleDateString('es-CL', {
+          Bienvenida, {user?.name ?? user?.email} — {new Date().toLocaleDateString('es-CL', {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
           })}
         </p>
