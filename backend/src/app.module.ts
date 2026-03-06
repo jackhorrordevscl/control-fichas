@@ -7,6 +7,7 @@ import { PatientsModule } from './modules/patients/patients.module';
 import { ConsultationsModule } from './modules/consultations/consultations.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { DocumentsModule } from './modules/documents/documents.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 
 @Module({
@@ -20,6 +21,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     PatientsModule,
     ConsultationsModule,
     ReportsModule,
+    DocumentsModule,
   ],
   providers: [
     {
