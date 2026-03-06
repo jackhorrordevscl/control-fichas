@@ -7,6 +7,7 @@ import PatientsPage from './pages/PatientsPage';
 import ConsultationsPage from './pages/ConsultationsPage';
 import Layout from './components/Layout';
 import SettingsPage from './pages/SettingsPage';
+import UsersPage from './pages/UsersPage';
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ function AppRoutes() {
         <Route path="patients" element={<PatientsPage />} />
         <Route path="consultations" element={<ConsultationsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="users" element={<UsersPage />} />
       </Route>
     </Routes>
   );

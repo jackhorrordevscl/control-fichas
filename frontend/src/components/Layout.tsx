@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList,
-  LogOut, ShieldCheck, Menu, X
+  LogOut, ShieldCheck, Menu, X, UserCog
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -21,6 +21,7 @@ export default function Layout() {
     { to: '/patients', icon: Users, label: 'Pacientes' },
     { to: '/consultations', icon: ClipboardList, label: 'Consultas' },
     { to: '/settings', icon: ShieldCheck, label: 'Seguridad' },
+    { to: '/users', icon: UserCog, label: 'Usuarios' },
   ];
 
   return (
