@@ -24,6 +24,12 @@ let PatientsController = class PatientsController {
     constructor(patientsService) {
         this.patientsService = patientsService;
     }
+    consultarProximaSesion(rut) {
+        if (!rut || rut.trim().length < 5) {
+            return { found: false, message: 'RUT inválido' };
+        }
+        return this.patientsService.consultarSesionPorRut(rut);
+    }
     create(dto, user) {
         return this.patientsService.create(dto, user.id);
     }
@@ -42,6 +48,14 @@ let PatientsController = class PatientsController {
 };
 exports.PatientsController = PatientsController;
 __decorate([
+    (0, common_1.Get)('public/next-session'),
+    __param(0, (0, common_1.Query)('rut')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], PatientsController.prototype, "consultarProximaSesion", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
@@ -50,6 +64,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PatientsController.prototype, "create", null);
 __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Get)(),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -57,6 +72,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PatientsController.prototype, "findAll", null);
 __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
@@ -65,6 +81,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PatientsController.prototype, "findOne", null);
 __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Patch)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
@@ -74,6 +91,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PatientsController.prototype, "update", null);
 __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Delete)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
@@ -82,7 +100,6 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PatientsController.prototype, "softDelete", null);
 exports.PatientsController = PatientsController = __decorate([
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('patients'),
     __metadata("design:paramtypes", [patients_service_1.PatientsService])
 ], PatientsController);

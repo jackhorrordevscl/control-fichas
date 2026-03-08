@@ -34,4 +34,12 @@ export class CreateConsultationDto {
   @IsOptional()
   @IsEnum(SessionType)
   sessionType?: SessionType;
+
+  @IsOptional()
+  @IsDateString()
+  scheduledAt?: string;
+
+  @IsOptional()
+  @IsString()
+  patientRut?: string;
 }

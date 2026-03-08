@@ -8,6 +8,16 @@ export class ConsultationsService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateConsultationDto, therapistId: string) {
+    // Obtener RUT del paciente si no viene en el DTO
+    let patientRut = dto.patientRut ?? '';
+    if (!patientRut && dto.patientId) {
+      const patient = await this.prisma.patient.findUnique({
+        where: { id: dto.patientId },
+        select: { rut: true },
+      });
+      patientRut = patient?.rut ?? '';
+    }
+
     return this.prisma.consultation.create({
       data: {
         patientId: dto.patientId,
@@ -21,6 +31,10 @@ export class ConsultationsService {
           : null,
         sessionType: dto.sessionType ?? 'IN_PERSON',
         version: 1,
+        scheduledAt: dto.scheduledAt
+          ? new Date(dto.scheduledAt)
+          : new Date(dto.sessionDate),
+        patientRut,
       },
     });
   }
@@ -46,25 +60,20 @@ export class ConsultationsService {
         },
       },
     });
-
     if (!consultation) {
       throw new NotFoundException('Consulta no encontrada');
     }
-
     return consultation;
   }
 
-  // Corrección legal: no edita, crea nueva versión vinculada a la original
   async correct(id: string, dto: CorrectConsultationDto, therapistId: string) {
     const original = await this.findOne(id);
 
-    // Marca la original como corregida
     await this.prisma.consultation.update({
       where: { id },
       data: { isCorrected: true },
     });
 
-    // Crea nueva versión con los datos corregidos
     return this.prisma.consultation.create({
       data: {
         patientId: original.patientId,
@@ -82,6 +91,8 @@ export class ConsultationsService {
         version: original.version + 1,
         previousVersionId: original.id,
         isCorrected: false,
+        scheduledAt: original.scheduledAt,
+        patientRut: original.patientRut,
       },
     });
   }

@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { PatientsService } from './patients.service';
@@ -14,26 +15,39 @@ import { UpdatePatientDto } from './dto/update-patient.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
-@UseGuards(JwtAuthGuard)
 @Controller('patients')
 export class PatientsController {
   constructor(private patientsService: PatientsService) {}
 
+  // ── Ruta pública: sin JwtAuthGuard ──────────────────────────────
+  @Get('public/next-session')
+  consultarProximaSesion(@Query('rut') rut: string) {
+    if (!rut || rut.trim().length < 5) {
+      return { found: false, message: 'RUT inválido' };
+    }
+    return this.patientsService.consultarSesionPorRut(rut);
+  }
+
+  // ── Rutas protegidas ────────────────────────────────────────────
+  @UseGuards(JwtAuthGuard)
   @Post()
   create(@Body() dto: CreatePatientDto, @CurrentUser() user: any) {
     return this.patientsService.create(dto, user.id);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get()
   findAll(@CurrentUser() user: any) {
     return this.patientsService.findAll(user.id);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.patientsService.findOne(id, user.id);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -43,6 +57,7 @@ export class PatientsController {
     return this.patientsService.update(id, dto, user.id);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   softDelete(@Param('id') id: string, @CurrentUser() user: any) {
     return this.patientsService.softDelete(id, user.id);

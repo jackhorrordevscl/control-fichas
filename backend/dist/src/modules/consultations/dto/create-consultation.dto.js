@@ -24,6 +24,8 @@ class CreateConsultationDto {
     agreements;
     nextSessionDate;
     sessionType;
+    scheduledAt;
+    patientRut;
 }
 exports.CreateConsultationDto = CreateConsultationDto;
 __decorate([
@@ -57,4 +59,14 @@ __decorate([
     (0, class_validator_1.IsEnum)(SessionType),
     __metadata("design:type", String)
 ], CreateConsultationDto.prototype, "sessionType", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", String)
+], CreateConsultationDto.prototype, "scheduledAt", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateConsultationDto.prototype, "patientRut", void 0);
 //# sourceMappingURL=create-consultation.dto.js.map

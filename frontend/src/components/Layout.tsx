@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList,
-  LogOut, ShieldCheck, Menu, X, UserCog
+  LogOut, ShieldCheck, Menu, X, UserCog, FolderOpen
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -20,22 +20,19 @@ export default function Layout() {
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/patients', icon: Users, label: 'Pacientes' },
     { to: '/consultations', icon: ClipboardList, label: 'Consultas' },
+    { to: '/archivos', icon: FolderOpen, label: 'Repositorio' },
     { to: '/settings', icon: ShieldCheck, label: 'Seguridad' },
     { to: '/users', icon: UserCog, label: 'Usuarios' },
   ];
 
   return (
     <div className="flex h-screen bg-cream-100">
-
-      {/* Overlay móvil */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-20 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
-
-      {/* Sidebar */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-30
         w-64 bg-slate-900 flex flex-col
@@ -43,7 +40,6 @@ export default function Layout() {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
       `}>
-        {/* Logo */}
         <div className="px-6 py-8 border-b border-slate-800 flex items-center justify-between">
           <div>
             <h1 className="font-display text-2xl text-white">Umbral</h1>
@@ -56,8 +52,6 @@ export default function Layout() {
             <X size={20} />
           </button>
         </div>
-
-        {/* Navegación */}
         <nav className="flex-1 px-3 py-6 space-y-1">
           {navLinks.map(({ to, icon: Icon, label }) => (
             <NavLink
@@ -73,8 +67,6 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-
-        {/* Usuario y logout */}
         <div className="px-3 py-4 border-t border-slate-800">
           <div className="px-4 py-2 mb-2">
             <p className="text-white text-sm font-medium truncate">{user?.email}</p>
@@ -89,11 +81,7 @@ export default function Layout() {
           </button>
         </div>
       </aside>
-
-      {/* Contenido principal */}
       <div className="flex-1 flex flex-col overflow-hidden">
-
-        {/* Topbar móvil */}
         <header className="lg:hidden bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => setSidebarOpen(true)}
@@ -103,7 +91,6 @@ export default function Layout() {
           </button>
           <h1 className="font-display text-xl text-slate-900">Umbral</h1>
         </header>
-
         <main className="flex-1 overflow-auto">
           <Outlet />
         </main>

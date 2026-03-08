@@ -67,6 +67,48 @@ let PatientsService = class PatientsService {
             data: { deletedAt: new Date() },
         });
     }
+    async consultarSesionPorRut(rut) {
+        const rutNormalizado = rut.replace(/\./g, '').trim().toUpperCase();
+        const patient = await this.prisma.patient.findFirst({
+            where: {
+                rut: rutNormalizado,
+                deletedAt: null,
+            },
+            include: {
+                therapist: { select: { name: true } },
+                consultations: {
+                    where: {
+                        scheduledAt: { gte: new Date() },
+                    },
+                    orderBy: { scheduledAt: 'asc' },
+                    take: 1,
+                },
+            },
+        });
+        if (!patient) {
+            return {
+                found: false,
+                message: 'No se encontró ningún paciente con ese RUT',
+            };
+        }
+        const proximaSesion = patient.consultations[0];
+        if (!proximaSesion?.scheduledAt) {
+            return {
+                found: true,
+                patientName: patient.fullName,
+                therapistName: patient.therapist?.name ?? 'No asignado',
+                nextSession: null,
+                message: 'No tienes sesiones programadas próximamente',
+            };
+        }
+        return {
+            found: true,
+            patientName: patient.fullName,
+            therapistName: patient.therapist?.name ?? 'No asignado',
+            nextSession: proximaSesion.scheduledAt,
+            message: 'Sesión encontrada',
+        };
+    }
 };
 exports.PatientsService = PatientsService;
 exports.PatientsService = PatientsService = __decorate([
