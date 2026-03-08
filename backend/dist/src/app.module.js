@@ -18,6 +18,7 @@ const reports_module_1 = require("./modules/reports/reports.module");
 const audit_module_1 = require("./modules/audit/audit.module");
 const documents_module_1 = require("./modules/documents/documents.module");
 const users_module_1 = require("./modules/users/users.module");
+const shared_files_module_1 = require("./shared-files/shared-files.module");
 const audit_interceptor_1 = require("./common/interceptors/audit.interceptor");
 let AppModule = class AppModule {
 };
@@ -36,6 +37,7 @@ exports.AppModule = AppModule = __decorate([
             consultations_module_1.ConsultationsModule,
             reports_module_1.ReportsModule,
             documents_module_1.DocumentsModule,
+            shared_files_module_1.SharedFilesModule,
         ],
         providers: [
             {

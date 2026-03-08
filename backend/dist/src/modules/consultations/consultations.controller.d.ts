@@ -6,9 +6,6 @@ export declare class ConsultationsController {
     constructor(consultationsService: ConsultationsService);
     create(dto: CreateConsultationDto, user: any): Promise<{
         id: string;
-        createdAt: Date;
-        therapistId: string;
-        patientId: string;
         sessionDate: Date;
         consultReason: string;
         intervention: string;
@@ -18,17 +15,20 @@ export declare class ConsultationsController {
         version: number;
         previousVersionId: string | null;
         isCorrected: boolean;
+        createdAt: Date;
+        scheduledAt: Date;
+        reminderSent: boolean;
+        patientRut: string;
+        patientId: string;
+        therapistId: string;
     }>;
     findByPatient(patientId: string): Promise<({
         therapist: {
-            email: string;
             name: string;
+            email: string;
         };
     } & {
         id: string;
-        createdAt: Date;
-        therapistId: string;
-        patientId: string;
         sessionDate: Date;
         consultReason: string;
         intervention: string;
@@ -38,17 +38,20 @@ export declare class ConsultationsController {
         version: number;
         previousVersionId: string | null;
         isCorrected: boolean;
+        createdAt: Date;
+        scheduledAt: Date;
+        reminderSent: boolean;
+        patientRut: string;
+        patientId: string;
+        therapistId: string;
     })[]>;
     findOne(id: string): Promise<{
         therapist: {
-            email: string;
             name: string;
+            email: string;
         };
     } & {
         id: string;
-        createdAt: Date;
-        therapistId: string;
-        patientId: string;
         sessionDate: Date;
         consultReason: string;
         intervention: string;
@@ -58,12 +61,15 @@ export declare class ConsultationsController {
         version: number;
         previousVersionId: string | null;
         isCorrected: boolean;
+        createdAt: Date;
+        scheduledAt: Date;
+        reminderSent: boolean;
+        patientRut: string;
+        patientId: string;
+        therapistId: string;
     }>;
     correct(id: string, dto: CorrectConsultationDto, user: any): Promise<{
         id: string;
-        createdAt: Date;
-        therapistId: string;
-        patientId: string;
         sessionDate: Date;
         consultReason: string;
         intervention: string;
@@ -73,5 +79,11 @@ export declare class ConsultationsController {
         version: number;
         previousVersionId: string | null;
         isCorrected: boolean;
+        createdAt: Date;
+        scheduledAt: Date;
+        reminderSent: boolean;
+        patientRut: string;
+        patientId: string;
+        therapistId: string;
     }>;
 }

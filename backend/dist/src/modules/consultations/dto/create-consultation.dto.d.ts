@@ -10,4 +10,6 @@ export declare class CreateConsultationDto {
     agreements?: string;
     nextSessionDate?: string;
     sessionType?: SessionType;
+    scheduledAt?: string;
+    patientRut?: string;
 }

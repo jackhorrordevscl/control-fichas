@@ -18,6 +18,14 @@ let ConsultationsService = class ConsultationsService {
         this.prisma = prisma;
     }
     async create(dto, therapistId) {
+        let patientRut = dto.patientRut ?? '';
+        if (!patientRut && dto.patientId) {
+            const patient = await this.prisma.patient.findUnique({
+                where: { id: dto.patientId },
+                select: { rut: true },
+            });
+            patientRut = patient?.rut ?? '';
+        }
         return this.prisma.consultation.create({
             data: {
                 patientId: dto.patientId,
@@ -31,6 +39,10 @@ let ConsultationsService = class ConsultationsService {
                     : null,
                 sessionType: dto.sessionType ?? 'IN_PERSON',
                 version: 1,
+                scheduledAt: dto.scheduledAt
+                    ? new Date(dto.scheduledAt)
+                    : new Date(dto.sessionDate),
+                patientRut,
             },
         });
     }
@@ -82,6 +94,8 @@ let ConsultationsService = class ConsultationsService {
                 version: original.version + 1,
                 previousVersionId: original.id,
                 isCorrected: false,
+                scheduledAt: original.scheduledAt,
+                patientRut: original.patientRut,
             },
         });
     }

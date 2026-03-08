@@ -25,15 +25,18 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
-
+  
   patients      Patient[]
   consultations Consultation[]
   auditLogs     AuditLog[]
+  sharedFiles   SharedFile[] @relation("UploadedFiles")
 }
 
 enum Role {
-  ADMIN
+  DIRECTOR
+  COORDINATOR
   THERAPIST
+  ADMIN
 }
 
 model Patient {
@@ -55,6 +58,7 @@ model Patient {
   updatedAt             DateTime  @updatedAt
   consentSigned         Boolean   @default(false)
   telemedConsentSigned  Boolean   @default(false)
+  notificationsConsent  Boolean   @default(false)
 
   therapistId    String
   therapist      User               @relation(fields: [therapistId], references: [id])
@@ -96,6 +100,9 @@ model Consultation {
   previousVersionId String?
   isCorrected       Boolean     @default(false)
   createdAt         DateTime    @default(now())
+  scheduledAt       DateTime
+  reminderSent      Boolean     @default(false)
+  patientRut        String
 }
 
 enum SessionType {
@@ -127,4 +134,32 @@ enum AuditAction {
   DOCUMENT_UPLOAD
   MFA_ENABLED
   MFA_FAILED
+}
+
+model SharedFile {
+  id          String   @id @default(cuid())
+  name        String                          // Nombre descriptivo del archivo
+  originalName String                         // Nombre original del archivo
+  filename    String                          // Nombre en disco
+  path        String                          // Ruta en servidor
+  mimetype    String
+  size        Int
+  category    FileCategory @default(GENERAL)
+  description String?
+  uploadedBy  User     @relation("UploadedFiles", fields: [uploadedById], references: [id])
+  uploadedById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isActive    Boolean  @default(true)
+
+  @@map("shared_files")
+}
+
+enum FileCategory {
+  LIBRO
+  PLANTILLA
+  IMAGEN
+  FORMULARIO
+  PROTOCOLO
+  GENERAL
 }
