@@ -34,16 +34,16 @@ let PatientsController = class PatientsController {
         return this.patientsService.create(dto, user.id);
     }
     findAll(user) {
-        return this.patientsService.findAll(user.id);
+        return this.patientsService.findAll(user.id, user.role);
     }
     findOne(id, user) {
-        return this.patientsService.findOne(id, user.id);
+        return this.patientsService.findOne(id, user.id, user.role);
     }
     update(id, dto, user) {
-        return this.patientsService.update(id, dto, user.id);
+        return this.patientsService.update(id, dto, user.id, user.role);
     }
     softDelete(id, user) {
-        return this.patientsService.softDelete(id, user.id);
+        return this.patientsService.softDelete(id, user.id, user.role);
     }
 };
 exports.PatientsController = PatientsController;

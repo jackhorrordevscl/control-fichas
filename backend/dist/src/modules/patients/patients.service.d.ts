@@ -6,53 +6,54 @@ export declare class PatientsService {
     constructor(prisma: PrismaService);
     create(dto: CreatePatientDto, therapistId: string): Promise<{
         id: string;
+        email: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
         fullName: string;
         rut: string;
         birthDate: Date;
         occupation: string | null;
         address: string | null;
         phone: string | null;
-        email: string | null;
         emergencyContactName: string | null;
         emergencyContactPhone: string | null;
         treatingPsychiatrist: string | null;
         treatingDoctor: string | null;
-        isActive: boolean;
-        deletedAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
         consentSigned: boolean;
         telemedConsentSigned: boolean;
+        isActive: boolean;
         notificationsConsent: boolean;
         therapistId: string;
     }>;
-    findAll(therapistId: string): Promise<{
+    findAll(userId: string, userRole: string): Promise<{
         id: string;
+        email: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
         fullName: string;
         rut: string;
         birthDate: Date;
         occupation: string | null;
         address: string | null;
         phone: string | null;
-        email: string | null;
         emergencyContactName: string | null;
         emergencyContactPhone: string | null;
         treatingPsychiatrist: string | null;
         treatingDoctor: string | null;
-        isActive: boolean;
-        deletedAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
         consentSigned: boolean;
         telemedConsentSigned: boolean;
+        isActive: boolean;
         notificationsConsent: boolean;
         therapistId: string;
     }[]>;
-    findOne(id: string, therapistId: string): Promise<{
+    findOne(id: string, userId: string, userRole: string): Promise<{
         consultations: {
             id: string;
             createdAt: Date;
             therapistId: string;
+            scheduledAt: Date;
             patientId: string;
             sessionDate: Date;
             consultReason: string;
@@ -63,10 +64,13 @@ export declare class PatientsService {
             version: number;
             previousVersionId: string | null;
             isCorrected: boolean;
-            scheduledAt: Date;
             reminderSent: boolean;
             patientRut: string;
         }[];
+        therapist: {
+            id: string;
+            name: string;
+        };
         documents: {
             id: string;
             patientId: string;
@@ -78,67 +82,67 @@ export declare class PatientsService {
         }[];
     } & {
         id: string;
+        email: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
         fullName: string;
         rut: string;
         birthDate: Date;
         occupation: string | null;
         address: string | null;
         phone: string | null;
-        email: string | null;
         emergencyContactName: string | null;
         emergencyContactPhone: string | null;
         treatingPsychiatrist: string | null;
         treatingDoctor: string | null;
-        isActive: boolean;
-        deletedAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
         consentSigned: boolean;
         telemedConsentSigned: boolean;
+        isActive: boolean;
         notificationsConsent: boolean;
         therapistId: string;
     }>;
-    update(id: string, dto: UpdatePatientDto, therapistId: string): Promise<{
+    update(id: string, dto: UpdatePatientDto, userId: string, userRole?: string): Promise<{
         id: string;
+        email: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
         fullName: string;
         rut: string;
         birthDate: Date;
         occupation: string | null;
         address: string | null;
         phone: string | null;
-        email: string | null;
         emergencyContactName: string | null;
         emergencyContactPhone: string | null;
         treatingPsychiatrist: string | null;
         treatingDoctor: string | null;
-        isActive: boolean;
-        deletedAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
         consentSigned: boolean;
         telemedConsentSigned: boolean;
+        isActive: boolean;
         notificationsConsent: boolean;
         therapistId: string;
     }>;
-    softDelete(id: string, therapistId: string): Promise<{
+    softDelete(id: string, userId: string, userRole?: string): Promise<{
         id: string;
+        email: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
         fullName: string;
         rut: string;
         birthDate: Date;
         occupation: string | null;
         address: string | null;
         phone: string | null;
-        email: string | null;
         emergencyContactName: string | null;
         emergencyContactPhone: string | null;
         treatingPsychiatrist: string | null;
         treatingDoctor: string | null;
-        isActive: boolean;
-        deletedAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
         consentSigned: boolean;
         telemedConsentSigned: boolean;
+        isActive: boolean;
         notificationsConsent: boolean;
         therapistId: string;
     }>;

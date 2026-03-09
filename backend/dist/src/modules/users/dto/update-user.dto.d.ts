@@ -1,7 +1,7 @@
-import { Role } from './create-user.dto';
+import { UserRole } from './create-user.dto';
 export declare class UpdateUserDto {
     email?: string;
     name?: string;
     password?: string;
-    role?: Role;
+    role?: UserRole;
 }

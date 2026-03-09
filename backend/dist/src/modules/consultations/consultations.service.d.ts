@@ -6,6 +6,10 @@ export declare class ConsultationsService {
     constructor(prisma: PrismaService);
     create(dto: CreateConsultationDto, therapistId: string): Promise<{
         id: string;
+        createdAt: Date;
+        therapistId: string;
+        scheduledAt: Date;
+        patientId: string;
         sessionDate: Date;
         consultReason: string;
         intervention: string;
@@ -15,20 +19,20 @@ export declare class ConsultationsService {
         version: number;
         previousVersionId: string | null;
         isCorrected: boolean;
-        createdAt: Date;
-        scheduledAt: Date;
         reminderSent: boolean;
         patientRut: string;
-        patientId: string;
-        therapistId: string;
     }>;
     findByPatient(patientId: string): Promise<({
         therapist: {
-            name: string;
             email: string;
+            name: string;
         };
     } & {
         id: string;
+        createdAt: Date;
+        therapistId: string;
+        scheduledAt: Date;
+        patientId: string;
         sessionDate: Date;
         consultReason: string;
         intervention: string;
@@ -38,20 +42,20 @@ export declare class ConsultationsService {
         version: number;
         previousVersionId: string | null;
         isCorrected: boolean;
-        createdAt: Date;
-        scheduledAt: Date;
         reminderSent: boolean;
         patientRut: string;
-        patientId: string;
-        therapistId: string;
     })[]>;
     findOne(id: string): Promise<{
         therapist: {
-            name: string;
             email: string;
+            name: string;
         };
     } & {
         id: string;
+        createdAt: Date;
+        therapistId: string;
+        scheduledAt: Date;
+        patientId: string;
         sessionDate: Date;
         consultReason: string;
         intervention: string;
@@ -61,15 +65,15 @@ export declare class ConsultationsService {
         version: number;
         previousVersionId: string | null;
         isCorrected: boolean;
-        createdAt: Date;
-        scheduledAt: Date;
         reminderSent: boolean;
         patientRut: string;
-        patientId: string;
-        therapistId: string;
     }>;
     correct(id: string, dto: CorrectConsultationDto, therapistId: string): Promise<{
         id: string;
+        createdAt: Date;
+        therapistId: string;
+        scheduledAt: Date;
+        patientId: string;
         sessionDate: Date;
         consultReason: string;
         intervention: string;
@@ -79,11 +83,7 @@ export declare class ConsultationsService {
         version: number;
         previousVersionId: string | null;
         isCorrected: boolean;
-        createdAt: Date;
-        scheduledAt: Date;
         reminderSent: boolean;
         patientRut: string;
-        patientId: string;
-        therapistId: string;
     }>;
 }
