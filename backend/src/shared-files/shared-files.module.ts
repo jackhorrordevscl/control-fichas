@@ -1,9 +1,8 @@
-// src/shared-files/shared-files.module.ts
 import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { SharedFilesController } from './shared-files.controller';
 import { SharedFilesService } from './shared-files.service';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -15,11 +14,11 @@ import { PrismaModule } from '../prisma/prisma.module';
       storage: diskStorage({
         destination: join(process.cwd(), 'uploads', 'shared'),
         filename: (_req, file, cb) => {
-          const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
+          const uniqueName = `${randomUUID()}${extname(file.originalname)}`;
           cb(null, uniqueName);
         },
       }),
-      limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+      limits: { fileSize: 50 * 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
         const allowed = [
           'application/pdf',
