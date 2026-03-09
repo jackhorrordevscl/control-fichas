@@ -19,7 +19,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class PatientsController {
   constructor(private patientsService: PatientsService) {}
 
-  // ── Ruta pública: sin JwtAuthGuard ──────────────────────────────
+  // ── Ruta pública ────────────────────────────────────────────────
   @Get('public/next-session')
   consultarProximaSesion(@Query('rut') rut: string) {
     if (!rut || rut.trim().length < 5) {
@@ -38,13 +38,13 @@ export class PatientsController {
   @UseGuards(JwtAuthGuard)
   @Get()
   findAll(@CurrentUser() user: any) {
-    return this.patientsService.findAll(user.id);
+    return this.patientsService.findAll(user.id, user.role);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.patientsService.findOne(id, user.id);
+    return this.patientsService.findOne(id, user.id, user.role);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -54,12 +54,12 @@ export class PatientsController {
     @Body() dto: UpdatePatientDto,
     @CurrentUser() user: any,
   ) {
-    return this.patientsService.update(id, dto, user.id);
+    return this.patientsService.update(id, dto, user.id, user.role);
   }
 
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
   softDelete(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.patientsService.softDelete(id, user.id);
+    return this.patientsService.softDelete(id, user.id, user.role);
   }
 }

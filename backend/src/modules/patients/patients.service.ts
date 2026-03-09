@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
@@ -17,34 +17,72 @@ export class PatientsService {
     });
   }
 
-  async findAll(therapistId: string) {
+  async findAll(userId: string, userRole: string) {
+    // DIRECTOR y ADMIN ven todos los pacientes
+    if (userRole === 'DIRECTOR' || userRole === 'ADMIN') {
+      return this.prisma.patient.findMany({
+        where: { deletedAt: null },
+        include: {
+          therapist: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    // COORDINATOR ve todos los pacientes pero sin ficha clínica
+    if (userRole === 'COORDINATOR') {
+      return this.prisma.patient.findMany({
+        where: { deletedAt: null },
+        include: {
+          therapist: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    // THERAPIST solo ve sus propios pacientes
     return this.prisma.patient.findMany({
-      where: {
-        therapistId,
-        deletedAt: null,
-      },
+      where: { therapistId: userId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string, therapistId: string) {
+  async findOne(id: string, userId: string, userRole: string) {
     const patient = await this.prisma.patient.findFirst({
-      where: { id, therapistId, deletedAt: null },
+      where: { id, deletedAt: null },
       include: {
-        consultations: {
-          orderBy: { createdAt: 'desc' },
-        },
+        therapist: { select: { id: true, name: true } },
+        consultations: { orderBy: { createdAt: 'desc' } },
         documents: true,
       },
     });
-    if (!patient) {
-      throw new NotFoundException('Paciente no encontrado');
+
+    if (!patient) throw new NotFoundException('Paciente no encontrado');
+
+    // DIRECTOR y ADMIN acceden a cualquier ficha
+    if (userRole === 'DIRECTOR' || userRole === 'ADMIN') {
+      return patient;
+    }
+
+    // COORDINATOR solo accede a fichas de sus propios pacientes
+    if (userRole === 'COORDINATOR') {
+      if (patient.therapistId !== userId) {
+        throw new ForbiddenException(
+          'Como Coordinador solo puedes ver la ficha clínica de tus propios pacientes',
+        );
+      }
+      return patient;
+    }
+
+    // THERAPIST solo accede a sus propios pacientes
+    if (patient.therapistId !== userId) {
+      throw new ForbiddenException('Acceso denegado a este paciente');
     }
     return patient;
   }
 
-  async update(id: string, dto: UpdatePatientDto, therapistId: string) {
-    await this.findOne(id, therapistId);
+  async update(id: string, dto: UpdatePatientDto, userId: string, userRole?: string) {
+    await this.findOne(id, userId, userRole ?? 'THERAPIST');
     return this.prisma.patient.update({
       where: { id },
       data: {
@@ -54,8 +92,8 @@ export class PatientsService {
     });
   }
 
-  async softDelete(id: string, therapistId: string) {
-    await this.findOne(id, therapistId);
+  async softDelete(id: string, userId: string, userRole?: string) {
+    await this.findOne(id, userId, userRole ?? 'THERAPIST');
     return this.prisma.patient.update({
       where: { id },
       data: { deletedAt: new Date() },
@@ -66,16 +104,11 @@ export class PatientsService {
     const rutNormalizado = rut.replace(/\./g, '').trim().toUpperCase();
 
     const patient = await this.prisma.patient.findFirst({
-      where: {
-        rut: rutNormalizado,
-        deletedAt: null,
-      },
+      where: { rut: rutNormalizado, deletedAt: null },
       include: {
         therapist: { select: { name: true } },
         consultations: {
-          where: {
-            scheduledAt: { gte: new Date() },
-          },
+          where: { scheduledAt: { gte: new Date() } },
           orderBy: { scheduledAt: 'asc' },
           take: 1,
         },
@@ -83,10 +116,7 @@ export class PatientsService {
     });
 
     if (!patient) {
-      return {
-        found: false,
-        message: 'No se encontró ningún paciente con ese RUT',
-      };
+      return { found: false, message: 'No se encontró ningún paciente con ese RUT' };
     }
 
     const proximaSesion = patient.consultations[0];

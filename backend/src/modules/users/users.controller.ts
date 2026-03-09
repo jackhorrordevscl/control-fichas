@@ -22,31 +22,31 @@ export class UsersController {
   constructor(private usersService: UsersService) {}
 
   @Get()
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'DIRECTOR', 'COORDINATOR')
   findAll() {
     return this.usersService.findAll();
   }
 
   @Get(':id')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'DIRECTOR', 'COORDINATOR')
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
   @Post()
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'DIRECTOR', 'COORDINATOR')
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
   }
 
   @Patch(':id')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'DIRECTOR', 'COORDINATOR')
   update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'DIRECTOR', 'COORDINATOR')
   softDelete(@Param('id') id: string, @CurrentUser() user: any) {
     return this.usersService.softDelete(id, user.id);
   }

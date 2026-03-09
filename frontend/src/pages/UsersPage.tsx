@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, Trash2, Shield, User, X } from 'lucide-react';
+import { UserPlus, Trash2, Shield, User, X, Crown, Users } from 'lucide-react';
 import api from '../api/client';
 
 interface UserItem {
@@ -12,6 +12,33 @@ interface UserItem {
   createdAt: string;
 }
 
+const ROLES = [
+  { value: 'THERAPIST', label: 'Terapeuta' },
+  { value: 'COORDINATOR', label: 'Coordinador/a' },
+  { value: 'DIRECTOR', label: 'Director/a' },
+  { value: 'ADMIN', label: 'Administrador' },
+];
+
+const roleLabel = (role: string) => ROLES.find(r => r.value === role)?.label ?? role;
+
+const roleBadge = (role: string) => {
+  switch (role) {
+    case 'ADMIN':     return 'bg-purple-50 text-purple-700';
+    case 'DIRECTOR':  return 'bg-indigo-50 text-indigo-700';
+    case 'COORDINATOR': return 'bg-blue-50 text-blue-700';
+    default:          return 'bg-sage-50 text-sage-700';
+  }
+};
+
+const roleIcon = (role: string) => {
+  switch (role) {
+    case 'ADMIN':       return <Shield size={16} className="text-purple-600" />;
+    case 'DIRECTOR':    return <Crown size={16} className="text-indigo-600" />;
+    case 'COORDINATOR': return <Users size={16} className="text-blue-600" />;
+    default:            return <User size={16} className="text-sage-600" />;
+  }
+};
+
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -22,7 +49,7 @@ export default function UsersPage() {
 
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
-    queryFn: () => api.get('/users').then(r => r.data),
+    queryFn: () => api.get('/users').then((r: any) => r.data),
   });
 
   const createMutation = useMutation({
@@ -41,7 +68,15 @@ export default function UsersPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/users/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+    onError: (err: any) => {
+      alert(err.response?.data?.message ?? 'Error al eliminar usuario');
+    },
   });
+
+  const handleDelete = (u: UserItem) => {
+    if (!confirm(`¿Eliminar al usuario "${u.name}"? Esta acción no se puede deshacer.`)) return;
+    deleteMutation.mutate(u.id);
+  };
 
   return (
     <div className="p-4 md:p-8">
@@ -88,8 +123,9 @@ export default function UsersPage() {
               <label className="block text-xs font-medium text-slate-600 mb-1">Rol</label>
               <select className="input-field" value={form.role}
                 onChange={e => setForm({ ...form, role: e.target.value })}>
-                <option value="THERAPIST">Terapeuta</option>
-                <option value="ADMIN">Administrador</option>
+                {ROLES.map(r => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -134,19 +170,13 @@ export default function UsersPage() {
                     <p className="text-xs text-slate-400">{u.email}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      u.role === 'ADMIN'
-                        ? 'bg-purple-50 text-purple-700'
-                        : 'bg-sage-50 text-sage-700'
-                    }`}>
-                      {u.role === 'ADMIN' ? 'Administrador' : 'Terapeuta'}
+                    <span className={`text-xs px-2 py-1 rounded-full ${roleBadge(u.role)}`}>
+                      {roleLabel(u.role)}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`text-xs px-2 py-1 rounded-full ${
-                      u.mfaEnabled
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-slate-100 text-slate-500'
+                      u.mfaEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
                     }`}>
                       {u.mfaEnabled ? 'Activo' : 'Inactivo'}
                     </span>
@@ -155,7 +185,7 @@ export default function UsersPage() {
                     {new Date(u.createdAt).toLocaleDateString('es-CL')}
                   </td>
                   <td className="px-6 py-4">
-                    <button onClick={() => deleteMutation.mutate(u.id)}
+                    <button onClick={() => handleDelete(u)}
                       className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 transition-colors">
                       <Trash2 size={15} />
                     </button>
@@ -179,23 +209,21 @@ export default function UsersPage() {
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-3">
                   <div className="bg-slate-100 p-2 rounded-lg">
-                    {u.role === 'ADMIN' ? <Shield size={16} className="text-purple-600" /> : <User size={16} className="text-sage-600" />}
+                    {roleIcon(u.role)}
                   </div>
                   <div>
                     <p className="font-medium text-slate-800 text-sm">{u.name}</p>
                     <p className="text-xs text-slate-400">{u.email}</p>
                   </div>
                 </div>
-                <button onClick={() => deleteMutation.mutate(u.id)}
+                <button onClick={() => handleDelete(u)}
                   className="p-1.5 hover:bg-red-50 rounded-lg text-red-400">
                   <Trash2 size={15} />
                 </button>
               </div>
               <div className="flex gap-2 mt-2">
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  u.role === 'ADMIN' ? 'bg-purple-50 text-purple-700' : 'bg-sage-50 text-sage-700'
-                }`}>
-                  {u.role === 'ADMIN' ? 'Administrador' : 'Terapeuta'}
+                <span className={`text-xs px-2 py-1 rounded-full ${roleBadge(u.role)}`}>
+                  {roleLabel(u.role)}
                 </span>
                 <span className={`text-xs px-2 py-1 rounded-full ${
                   u.mfaEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
