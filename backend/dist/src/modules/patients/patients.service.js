@@ -12,6 +12,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PatientsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../prisma/prisma.service");
+function normalizeRut(rut) {
+    return rut.replace(/\./g, '').trim().toUpperCase();
+}
 let PatientsService = class PatientsService {
     prisma;
     constructor(prisma) {
@@ -21,6 +24,7 @@ let PatientsService = class PatientsService {
         return this.prisma.patient.create({
             data: {
                 ...dto,
+                rut: normalizeRut(dto.rut),
                 birthDate: new Date(dto.birthDate),
                 therapistId,
             },
@@ -30,18 +34,14 @@ let PatientsService = class PatientsService {
         if (userRole === 'DIRECTOR' || userRole === 'ADMIN') {
             return this.prisma.patient.findMany({
                 where: { deletedAt: null },
-                include: {
-                    therapist: { select: { id: true, name: true } },
-                },
+                include: { therapist: { select: { id: true, name: true } } },
                 orderBy: { createdAt: 'desc' },
             });
         }
         if (userRole === 'COORDINATOR') {
             return this.prisma.patient.findMany({
                 where: { deletedAt: null },
-                include: {
-                    therapist: { select: { id: true, name: true } },
-                },
+                include: { therapist: { select: { id: true, name: true } } },
                 orderBy: { createdAt: 'desc' },
             });
         }
@@ -61,9 +61,8 @@ let PatientsService = class PatientsService {
         });
         if (!patient)
             throw new common_1.NotFoundException('Paciente no encontrado');
-        if (userRole === 'DIRECTOR' || userRole === 'ADMIN') {
+        if (userRole === 'DIRECTOR' || userRole === 'ADMIN')
             return patient;
-        }
         if (userRole === 'COORDINATOR') {
             if (patient.therapistId !== userId) {
                 throw new common_1.ForbiddenException('Como Coordinador solo puedes ver la ficha clínica de tus propios pacientes');
@@ -81,6 +80,7 @@ let PatientsService = class PatientsService {
             where: { id },
             data: {
                 ...dto,
+                ...(dto.rut && { rut: normalizeRut(dto.rut) }),
                 birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
             },
         });
@@ -93,14 +93,22 @@ let PatientsService = class PatientsService {
         });
     }
     async consultarSesionPorRut(rut) {
-        const rutNormalizado = rut.replace(/\./g, '').trim().toUpperCase();
+        const rutNorm = normalizeRut(rut);
+        const rutSinGuion = rutNorm.replace(/-/g, '');
         const patient = await this.prisma.patient.findFirst({
-            where: { rut: rutNormalizado, deletedAt: null },
+            where: {
+                deletedAt: null,
+                OR: [
+                    { rut: rutNorm },
+                    { rut: rutSinGuion },
+                    { rut: rut.trim().toUpperCase() },
+                ],
+            },
             include: {
                 therapist: { select: { name: true } },
                 consultations: {
-                    where: { scheduledAt: { gte: new Date() } },
-                    orderBy: { scheduledAt: 'asc' },
+                    where: { nextSessionDate: { gte: new Date() } },
+                    orderBy: { nextSessionDate: 'asc' },
                     take: 1,
                 },
             },
@@ -109,7 +117,7 @@ let PatientsService = class PatientsService {
             return { found: false, message: 'No se encontró ningún paciente con ese RUT' };
         }
         const proximaSesion = patient.consultations[0];
-        if (!proximaSesion?.scheduledAt) {
+        if (!proximaSesion?.nextSessionDate) {
             return {
                 found: true,
                 patientName: patient.fullName,
@@ -122,7 +130,7 @@ let PatientsService = class PatientsService {
             found: true,
             patientName: patient.fullName,
             therapistName: patient.therapist?.name ?? 'No asignado',
-            nextSession: proximaSesion.scheduledAt,
+            nextSession: proximaSesion.nextSessionDate,
             message: 'Sesión encontrada',
         };
     }
