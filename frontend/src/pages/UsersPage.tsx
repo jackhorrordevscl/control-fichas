@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, Trash2, Shield, User, X, Crown, Users } from 'lucide-react';
+import { UserPlus, Trash2, Shield, User, X, Crown, Users, Check } from 'lucide-react';
 import api from '../api/client';
 
 interface UserItem {
@@ -23,10 +23,10 @@ const roleLabel = (role: string) => ROLES.find(r => r.value === role)?.label ?? 
 
 const roleBadge = (role: string) => {
   switch (role) {
-    case 'ADMIN':     return 'bg-purple-50 text-purple-700';
-    case 'DIRECTOR':  return 'bg-indigo-50 text-indigo-700';
+    case 'ADMIN':       return 'bg-purple-50 text-purple-700';
+    case 'DIRECTOR':    return 'bg-indigo-50 text-indigo-700';
     case 'COORDINATOR': return 'bg-blue-50 text-blue-700';
-    default:          return 'bg-sage-50 text-sage-700';
+    default:            return 'bg-sage-50 text-sage-700';
   }
 };
 
@@ -39,13 +39,21 @@ const roleIcon = (role: string) => {
   }
 };
 
+// Roles que pueden editar roles de otros usuarios
+const CAN_EDIT_ROLES = ['ADMIN', 'DIRECTOR', 'COORDINATOR'];
+
 export default function UsersPage() {
   const queryClient = useQueryClient();
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const canEditRoles = CAN_EDIT_ROLES.includes(currentUser?.role);
+
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     email: '', name: '', password: '', role: 'THERAPIST',
   });
   const [error, setError] = useState('');
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [editingRole, setEditingRole] = useState('');
 
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
@@ -65,6 +73,18 @@ export default function UsersPage() {
     },
   });
 
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: string }) =>
+      api.patch(`/users/${id}`, { role }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setEditingRoleId(null);
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.message ?? 'Error al actualizar rol');
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/users/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
@@ -76,6 +96,63 @@ export default function UsersPage() {
   const handleDelete = (u: UserItem) => {
     if (!confirm(`¿Eliminar al usuario "${u.name}"? Esta acción no se puede deshacer.`)) return;
     deleteMutation.mutate(u.id);
+  };
+
+  const handleRoleClick = (u: UserItem) => {
+    if (!canEditRoles) return;
+    setEditingRoleId(u.id);
+    setEditingRole(u.role);
+  };
+
+  const handleRoleSave = (id: string) => {
+    updateRoleMutation.mutate({ id, role: editingRole });
+  };
+
+  const RoleCell = ({ u }: { u: UserItem }) => {
+    if (editingRoleId === u.id) {
+      return (
+        <div className="flex items-center gap-1">
+          <select
+            value={editingRole}
+            onChange={e => setEditingRole(e.target.value)}
+            className="text-xs border border-indigo-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            autoFocus
+          >
+            {ROLES.map(r => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => handleRoleSave(u.id)}
+            disabled={updateRoleMutation.isPending}
+            className="p-1 hover:bg-green-50 rounded text-green-600 transition-colors"
+            title="Guardar"
+          >
+            <Check size={14} />
+          </button>
+          <button
+            onClick={() => setEditingRoleId(null)}
+            className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors"
+            title="Cancelar"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <span
+        onClick={() => handleRoleClick(u)}
+        title={canEditRoles ? 'Clic para cambiar rol' : ''}
+        className={`text-xs px-2 py-1 rounded-full ${roleBadge(u.role)} ${
+          canEditRoles ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''
+        }`}
+      >
+        {roleLabel(u.role)}
+        {canEditRoles && <span className="ml-1 opacity-50">✎</span>}
+      </span>
+    );
   };
 
   return (
@@ -149,7 +226,9 @@ export default function UsersPage() {
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
               <th className="text-left px-6 py-3 text-xs font-medium text-slate-500">Usuario</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-slate-500">Rol</th>
+              <th className="text-left px-6 py-3 text-xs font-medium text-slate-500">
+                Rol {canEditRoles && <span className="text-indigo-400">(clic para editar)</span>}
+              </th>
               <th className="text-left px-6 py-3 text-xs font-medium text-slate-500">MFA</th>
               <th className="text-left px-6 py-3 text-xs font-medium text-slate-500">Creado</th>
               <th className="text-left px-6 py-3 text-xs font-medium text-slate-500">Acciones</th>
@@ -170,9 +249,7 @@ export default function UsersPage() {
                     <p className="text-xs text-slate-400">{u.email}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`text-xs px-2 py-1 rounded-full ${roleBadge(u.role)}`}>
-                      {roleLabel(u.role)}
-                    </span>
+                    <RoleCell u={u} />
                   </td>
                   <td className="px-6 py-4">
                     <span className={`text-xs px-2 py-1 rounded-full ${
@@ -221,10 +298,8 @@ export default function UsersPage() {
                   <Trash2 size={15} />
                 </button>
               </div>
-              <div className="flex gap-2 mt-2">
-                <span className={`text-xs px-2 py-1 rounded-full ${roleBadge(u.role)}`}>
-                  {roleLabel(u.role)}
-                </span>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <RoleCell u={u} />
                 <span className={`text-xs px-2 py-1 rounded-full ${
                   u.mfaEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
                 }`}>
