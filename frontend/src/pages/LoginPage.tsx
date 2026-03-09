@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 import { Calendar, Search, ArrowLeft, UserCircle, User } from 'lucide-react';
@@ -20,6 +21,22 @@ interface SessionResult {
   therapistName?: string;
   nextSession?: string | null;
   message: string;
+}
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const message = error.response?.data?.message;
+
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+
+    if (!error.response) {
+      return 'No se pudo conectar con el servidor. Intenta nuevamente.';
+    }
+  }
+
+  return fallback;
 }
 
 function formatRut(value: string): string {
@@ -202,8 +219,13 @@ export default function LoginPage() {
         login(res.data.accessToken, res.data.user);
         navigate('/dashboard');
       }
-    } catch {
-      setError('Credenciales inválidas. Verifica tu email y contraseña.');
+    } catch (error) {
+      setError(
+        getApiErrorMessage(
+          error,
+          'Credenciales inválidas. Verifica tu email y contraseña.',
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -216,8 +238,8 @@ export default function LoginPage() {
       const res = await api.post('/auth/mfa/verify', { userId, token: mfaToken });
       login(res.data.accessToken, res.data.user);
       navigate('/dashboard');
-    } catch {
-      setError('Código MFA inválido. Intenta de nuevo.');
+    } catch (error) {
+      setError(getApiErrorMessage(error, 'Código MFA inválido. Intenta de nuevo.'));
     } finally {
       setLoading(false);
     }
