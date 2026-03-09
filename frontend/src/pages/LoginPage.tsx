@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { formatRut, normalizeRut } from '../utils/rut';
 import api from '../api/client';
 import { Calendar, Search, ArrowLeft, UserCircle, User } from 'lucide-react';
 
@@ -39,14 +40,6 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function formatRut(value: string): string {
-  const clean = value.replace(/[^0-9kK]/g, '').toUpperCase();
-  if (clean.length < 2) return clean;
-  const body = clean.slice(0, -1);
-  const dv = clean.slice(-1);
-  const formatted = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `${formatted}-${dv}`;
-}
 
 function formatFecha(isoDate: string): string {
   return new Date(isoDate).toLocaleString('es-CL', {
@@ -74,7 +67,7 @@ function PublicSessionQuery() {
     setResult(null);
     try {
       const res = await api.get('/patients/public/next-session', {
-        params: { rut: rutClean },
+        params: { rut: normalizeRut(rutClean) },
       });
       setResult(res.data);
     } catch {
