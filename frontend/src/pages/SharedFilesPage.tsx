@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Upload, Download, Trash2, FileText, Image,
-  BookOpen, File, Search, X, Plus,
+  BookOpen, File, Search, X, Plus, AlertCircle,
 } from 'lucide-react';
 import api from '../api/client';
 
@@ -14,6 +14,11 @@ const CATEGORIES = [
   { value: 'FORMULARIO', label: 'Formularios' },
   { value: 'PROTOCOLO', label: 'Protocolos' },
   { value: 'GENERAL', label: 'General' },
+];
+
+const ALLOWED_EXTENSIONS = [
+  'PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'PPT', 'PPTX',
+  'JPG', 'PNG', 'GIF', 'WEBP', 'TXT', 'ZIP',
 ];
 
 const categoryIcon = (cat: string) => {
@@ -87,7 +92,12 @@ export default function SharedFilesPage() {
       setForm({ name: '', description: '', category: 'GENERAL', file: null });
       queryClient.invalidateQueries({ queryKey: ['shared-files'] });
     } catch (e: any) {
-      setUploadError(e?.response?.data?.message ?? 'Error al subir el archivo');
+      const msg = e?.response?.data?.message;
+      if (msg) {
+        setUploadError(msg);
+      } else {
+        setUploadError('Error al subir el archivo. Intenta nuevamente.');
+      }
     } finally {
       setUploading(false);
     }
@@ -204,19 +214,11 @@ export default function SharedFilesPage() {
                 {CATEGORIES.find(c => c.value === file.category)?.label ?? file.category}
               </span>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleDownload(file)}
-                  className="p-2 rounded-lg hover:bg-indigo-50 text-indigo-600 transition-colors"
-                  title="Descargar"
-                >
+                <button onClick={() => handleDownload(file)} className="p-2 rounded-lg hover:bg-indigo-50 text-indigo-600 transition-colors" title="Descargar">
                   <Download className="w-4 h-4" />
                 </button>
                 {canDelete(file) && (
-                  <button
-                    onClick={() => handleDelete(file.id)}
-                    className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
-                    title="Eliminar"
-                  >
+                  <button onClick={() => handleDelete(file.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Eliminar">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}
@@ -235,6 +237,7 @@ export default function SharedFilesPage() {
                 <X className="w-5 h-5 text-slate-400 hover:text-slate-600" />
               </button>
             </div>
+
             <div
               className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-300 transition-colors mb-4"
               onClick={() => fileInputRef.current?.click()}
@@ -245,7 +248,7 @@ export default function SharedFilesPage() {
                 <>
                   <Upload className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                   <p className="text-sm text-slate-500">Haz clic para seleccionar un archivo</p>
-                  <p className="text-xs text-slate-400 mt-1">PDF, Word, Excel, Imágenes · Máx. 50 MB</p>
+                  <p className="text-xs text-slate-400 mt-1">Máx. 50 MB</p>
                 </>
               )}
               <input
@@ -258,6 +261,19 @@ export default function SharedFilesPage() {
                 }}
               />
             </div>
+
+            {/* Formatos admitidos */}
+            <div className="bg-slate-50 rounded-lg px-3 py-2 mb-4">
+              <p className="text-xs text-slate-500 font-medium mb-1">Formatos admitidos:</p>
+              <div className="flex flex-wrap gap-1">
+                {ALLOWED_EXTENSIONS.map(ext => (
+                  <span key={ext} className="text-xs bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+                    .{ext.toLowerCase()}
+                  </span>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-3">
               <input
                 type="text"
@@ -283,7 +299,14 @@ export default function SharedFilesPage() {
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
               />
             </div>
-            {uploadError && <p className="text-red-500 text-xs mt-2">{uploadError}</p>}
+
+            {uploadError && (
+              <div className="mt-3 flex items-start gap-2 bg-red-50 border border-red-100 rounded-lg p-3">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-red-600 text-xs">{uploadError}</p>
+              </div>
+            )}
+
             <div className="flex gap-3 mt-5">
               <button
                 onClick={() => setShowUpload(false)}
