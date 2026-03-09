@@ -1,7 +1,9 @@
 import { IsEmail, IsString, MinLength, IsEnum, IsOptional } from 'class-validator';
 
-export enum Role {
+export enum UserRole {
   ADMIN = 'ADMIN',
+  DIRECTOR = 'DIRECTOR',
+  COORDINATOR = 'COORDINATOR',
   THERAPIST = 'THERAPIST',
 }
 
@@ -17,6 +19,6 @@ export class CreateUserDto {
   name: string;
 
   @IsOptional()
-  @IsEnum(Role)
-  role?: Role;
+  @IsEnum(UserRole)
+  role?: UserRole;
 }
