@@ -3,10 +3,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateConsultationDto } from './dto/create-consultation.dto';
 import { CorrectConsultationDto } from './dto/correct-consultation.dto';
 
-// Parsea fecha string "YYYY-MM-DD" sin desfase de timezone
-function parseLocalDate(dateStr: string): Date {
+// Si viene con hora (datetime), úsala directo. Si es solo fecha, parsea como local mediodía.
+function parseDate(dateStr: string): Date {
+  if (dateStr.includes('T') || dateStr.includes(' ')) {
+    return new Date(dateStr);
+  }
   const [year, month, day] = dateStr.split('-').map(Number);
-  return new Date(year, month - 1, day, 12, 0, 0); // mediodía local evita desfases
+  return new Date(year, month - 1, day, 12, 0, 0);
 }
 
 @Injectable()
@@ -27,18 +30,14 @@ export class ConsultationsService {
       data: {
         patientId: dto.patientId,
         therapistId,
-        sessionDate: parseLocalDate(dto.sessionDate),
+        sessionDate: parseDate(dto.sessionDate),
         consultReason: dto.consultReason,
         intervention: dto.intervention,
         agreements: dto.agreements,
-        nextSessionDate: dto.nextSessionDate
-          ? parseLocalDate(dto.nextSessionDate)
-          : null,
+        nextSessionDate: dto.nextSessionDate ? parseDate(dto.nextSessionDate) : null,
         sessionType: dto.sessionType ?? 'IN_PERSON',
         version: 1,
-        scheduledAt: dto.scheduledAt
-          ? parseLocalDate(dto.scheduledAt)
-          : parseLocalDate(dto.sessionDate),
+        scheduledAt: dto.scheduledAt ? parseDate(dto.scheduledAt) : parseDate(dto.sessionDate),
         patientRut,
       },
     });
@@ -75,15 +74,11 @@ export class ConsultationsService {
       data: {
         patientId: original.patientId,
         therapistId,
-        sessionDate: dto.sessionDate
-          ? parseLocalDate(dto.sessionDate)
-          : original.sessionDate,
+        sessionDate: dto.sessionDate ? parseDate(dto.sessionDate) : original.sessionDate,
         consultReason: dto.consultReason ?? original.consultReason,
         intervention: dto.intervention ?? original.intervention,
         agreements: dto.agreements ?? original.agreements,
-        nextSessionDate: dto.nextSessionDate
-          ? parseLocalDate(dto.nextSessionDate)
-          : original.nextSessionDate,
+        nextSessionDate: dto.nextSessionDate ? parseDate(dto.nextSessionDate) : original.nextSessionDate,
         sessionType: dto.sessionType ?? original.sessionType,
         version: original.version + 1,
         previousVersionId: original.id,
