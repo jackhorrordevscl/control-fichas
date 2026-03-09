@@ -36,6 +36,9 @@ let PatientsController = class PatientsController {
     findAll(user) {
         return this.patientsService.findAll(user.id, user.role);
     }
+    getHistory(id, user) {
+        return this.patientsService.getHistory(id, user.id, user.role);
+    }
     findOne(id, user) {
         return this.patientsService.findOne(id, user.id, user.role);
     }
@@ -71,6 +74,15 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], PatientsController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Get)(':id/history'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], PatientsController.prototype, "getHistory", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Get)(':id'),

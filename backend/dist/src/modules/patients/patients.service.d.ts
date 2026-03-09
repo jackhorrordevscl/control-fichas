@@ -53,12 +53,12 @@ export declare class PatientsService {
             id: string;
             createdAt: Date;
             therapistId: string;
-            nextSessionDate: Date | null;
             patientId: string;
             sessionDate: Date;
             consultReason: string;
             intervention: string;
             agreements: string | null;
+            nextSessionDate: Date | null;
             sessionType: import("@prisma/client").$Enums.SessionType;
             version: number;
             previousVersionId: string | null;
@@ -146,6 +146,21 @@ export declare class PatientsService {
         notificationsConsent: boolean;
         therapistId: string;
     }>;
+    getHistory(id: string, userId: string, userRole: string): Promise<({
+        changedBy: {
+            id: string;
+            name: string;
+            role: import("@prisma/client").$Enums.Role;
+        };
+    } & {
+        id: string;
+        reason: string;
+        patientId: string;
+        snapshot: import("@prisma/client/runtime/library").JsonValue;
+        changedById: string;
+        changedAt: Date;
+        diff: import("@prisma/client/runtime/library").JsonValue;
+    })[]>;
     consultarSesionPorRut(rut: string): Promise<{
         found: boolean;
         message: string;

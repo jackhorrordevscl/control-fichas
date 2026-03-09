@@ -42,6 +42,12 @@ export class PatientsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get(':id/history')
+  getHistory(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.patientsService.getHistory(id, user.id, user.role);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.patientsService.findOne(id, user.id, user.role);

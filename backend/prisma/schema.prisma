@@ -29,6 +29,7 @@ model User {
   patients      Patient[]
   consultations Consultation[]
   auditLogs     AuditLog[]
+  patientEdits  PatientHistory[] @relation("PatientEdits")
   sharedFiles   SharedFile[] @relation("UploadedFiles")
 }
 
@@ -64,6 +65,7 @@ model Patient {
   therapist      User               @relation(fields: [therapistId], references: [id])
   consultations  Consultation[]
   documents      PatientDocument[]
+  history        PatientHistory[]
 }
 
 model PatientDocument {
@@ -162,4 +164,16 @@ enum FileCategory {
   FORMULARIO
   PROTOCOLO
   GENERAL
+}
+
+model PatientHistory {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  changedById String
+  changedBy   User     @relation("PatientEdits", fields: [changedById], references: [id])
+  changedAt   DateTime @default(now())
+  reason      String
+  snapshot    Json
+  diff        Json
 }

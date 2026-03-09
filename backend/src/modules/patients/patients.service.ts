@@ -3,9 +3,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 
-// Normaliza RUT: quita puntos, mantiene guion, uppercase
 function normalizeRut(rut: string): string {
   return rut.replace(/\./g, '').trim().toUpperCase();
+}
+
+function isDate(val: unknown): val is Date {
+  return val !== null && val !== undefined && Object.prototype.toString.call(val) === '[object Date]';
 }
 
 @Injectable()
@@ -16,7 +19,7 @@ export class PatientsService {
     return this.prisma.patient.create({
       data: {
         ...dto,
-        rut: normalizeRut(dto.rut), // siempre guardar sin puntos
+        rut: normalizeRut(dto.rut),
         birthDate: new Date(dto.birthDate),
         therapistId,
       },
@@ -70,14 +73,59 @@ export class PatientsService {
   }
 
   async update(id: string, dto: UpdatePatientDto, userId: string, userRole?: string) {
-    await this.findOne(id, userId, userRole ?? 'THERAPIST');
-    return this.prisma.patient.update({
-      where: { id },
-      data: {
-        ...dto,
-        ...(dto.rut && { rut: normalizeRut(dto.rut) }),
-        birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
-      },
+    const current = await this.findOne(id, userId, userRole ?? 'THERAPIST');
+
+    const { reason, ...fields } = dto;
+
+    // Calcular diff: solo campos que realmente cambian
+    const diff: Record<string, { from: unknown; to: unknown }> = {};
+    for (const key of Object.keys(fields) as (keyof typeof fields)[]) {
+      const incoming = fields[key];
+      if (incoming === undefined) continue;
+
+      const currentVal = (current as Record<string, unknown>)[key];
+
+      const incomingStr = isDate(incoming)
+        ? incoming.toISOString()
+        : String(incoming);
+      const currentStr = isDate(currentVal)
+        ? currentVal.toISOString()
+        : currentVal !== null && currentVal !== undefined
+          ? String(currentVal)
+          : null;
+
+      if (incomingStr !== currentStr) {
+        diff[key] = { from: currentVal, to: incoming };
+      }
+    }
+
+    // Sin cambios reales → no tocar la DB
+    if (Object.keys(diff).length === 0) {
+      return current;
+    }
+
+    // Snapshot sin relaciones
+    const { therapist, consultations, documents, ...snapshot } = current as any;
+
+   return this.prisma.$transaction(async (tx) => {
+  await tx.patientHistory.create({
+    data: {
+      patientId: id,
+      changedById: userId,
+      reason,
+      snapshot: JSON.parse(JSON.stringify(snapshot)),
+      diff: JSON.parse(JSON.stringify(diff)),
+    },
+  });
+
+      return tx.patient.update({
+        where: { id },
+        data: {
+          ...fields,
+          ...(fields.rut && { rut: normalizeRut(fields.rut) }),
+          ...(fields.birthDate && { birthDate: new Date(fields.birthDate) }),
+        },
+      });
     });
   }
 
@@ -89,10 +137,21 @@ export class PatientsService {
     });
   }
 
+  async getHistory(id: string, userId: string, userRole: string) {
+    await this.findOne(id, userId, userRole);
+
+    return this.prisma.patientHistory.findMany({
+      where: { patientId: id },
+      include: {
+        changedBy: { select: { id: true, name: true, role: true } },
+      },
+      orderBy: { changedAt: 'desc' },
+    });
+  }
+
   async consultarSesionPorRut(rut: string) {
-    // Buscar con y sin guion para máxima compatibilidad
-    const rutNorm = normalizeRut(rut);               // 12345678-9
-    const rutSinGuion = rutNorm.replace(/-/g, '');   // 123456789
+    const rutNorm = normalizeRut(rut);
+    const rutSinGuion = rutNorm.replace(/-/g, '');
 
     const patient = await this.prisma.patient.findFirst({
       where: {

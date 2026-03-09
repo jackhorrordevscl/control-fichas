@@ -15,6 +15,9 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 function normalizeRut(rut) {
     return rut.replace(/\./g, '').trim().toUpperCase();
 }
+function isDate(val) {
+    return val !== null && val !== undefined && Object.prototype.toString.call(val) === '[object Date]';
+}
 let PatientsService = class PatientsService {
     prisma;
     constructor(prisma) {
@@ -75,14 +78,48 @@ let PatientsService = class PatientsService {
         return patient;
     }
     async update(id, dto, userId, userRole) {
-        await this.findOne(id, userId, userRole ?? 'THERAPIST');
-        return this.prisma.patient.update({
-            where: { id },
-            data: {
-                ...dto,
-                ...(dto.rut && { rut: normalizeRut(dto.rut) }),
-                birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
-            },
+        const current = await this.findOne(id, userId, userRole ?? 'THERAPIST');
+        const { reason, ...fields } = dto;
+        const diff = {};
+        for (const key of Object.keys(fields)) {
+            const incoming = fields[key];
+            if (incoming === undefined)
+                continue;
+            const currentVal = current[key];
+            const incomingStr = isDate(incoming)
+                ? incoming.toISOString()
+                : String(incoming);
+            const currentStr = isDate(currentVal)
+                ? currentVal.toISOString()
+                : currentVal !== null && currentVal !== undefined
+                    ? String(currentVal)
+                    : null;
+            if (incomingStr !== currentStr) {
+                diff[key] = { from: currentVal, to: incoming };
+            }
+        }
+        if (Object.keys(diff).length === 0) {
+            return current;
+        }
+        const { therapist, consultations, documents, ...snapshot } = current;
+        return this.prisma.$transaction(async (tx) => {
+            await tx.patientHistory.create({
+                data: {
+                    patientId: id,
+                    changedById: userId,
+                    reason,
+                    snapshot: JSON.parse(JSON.stringify(snapshot)),
+                    diff: JSON.parse(JSON.stringify(diff)),
+                },
+            });
+            return tx.patient.update({
+                where: { id },
+                data: {
+                    ...fields,
+                    ...(fields.rut && { rut: normalizeRut(fields.rut) }),
+                    ...(fields.birthDate && { birthDate: new Date(fields.birthDate) }),
+                },
+            });
         });
     }
     async softDelete(id, userId, userRole) {
@@ -90,6 +127,16 @@ let PatientsService = class PatientsService {
         return this.prisma.patient.update({
             where: { id },
             data: { deletedAt: new Date() },
+        });
+    }
+    async getHistory(id, userId, userRole) {
+        await this.findOne(id, userId, userRole);
+        return this.prisma.patientHistory.findMany({
+            where: { patientId: id },
+            include: {
+                changedBy: { select: { id: true, name: true, role: true } },
+            },
+            orderBy: { changedAt: 'desc' },
         });
     }
     async consultarSesionPorRut(rut) {

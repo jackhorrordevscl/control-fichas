@@ -70,17 +70,32 @@ export declare class PatientsController {
         notificationsConsent: boolean;
         therapistId: string;
     }[]>;
+    getHistory(id: string, user: any): Promise<({
+        changedBy: {
+            id: string;
+            name: string;
+            role: import("@prisma/client").$Enums.Role;
+        };
+    } & {
+        id: string;
+        reason: string;
+        patientId: string;
+        snapshot: import("@prisma/client/runtime/library").JsonValue;
+        changedById: string;
+        changedAt: Date;
+        diff: import("@prisma/client/runtime/library").JsonValue;
+    })[]>;
     findOne(id: string, user: any): Promise<{
         consultations: {
             id: string;
             createdAt: Date;
             therapistId: string;
-            nextSessionDate: Date | null;
             patientId: string;
             sessionDate: Date;
             consultReason: string;
             intervention: string;
             agreements: string | null;
+            nextSessionDate: Date | null;
             sessionType: import("@prisma/client").$Enums.SessionType;
             version: number;
             previousVersionId: string | null;
