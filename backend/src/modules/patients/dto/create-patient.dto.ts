@@ -55,4 +55,4 @@ export class CreatePatientDto {
   @IsOptional()
   @IsBoolean()
   telemedConsentSigned?: boolean;
-}
+};
