@@ -106,8 +106,8 @@ export class PatientsService {
       include: {
         therapist: { select: { name: true } },
         consultations: {
-          where: { scheduledAt: { gte: new Date() } },
-          orderBy: { scheduledAt: 'asc' },
+          where: { nextSessionDate: { gte: new Date() } },
+          orderBy: { nextSessionDate: 'asc' },
           take: 1,
         },
       },
@@ -119,7 +119,7 @@ export class PatientsService {
 
     const proximaSesion = patient.consultations[0];
 
-    if (!proximaSesion?.scheduledAt) {
+    if (!proximaSesion?.nextSessionDate) {
       return {
         found: true,
         patientName: patient.fullName,
@@ -133,7 +133,7 @@ export class PatientsService {
       found: true,
       patientName: patient.fullName,
       therapistName: patient.therapist?.name ?? 'No asignado',
-      nextSession: proximaSesion.scheduledAt,
+      nextSession: proximaSesion.nextSessionDate,
       message: 'Sesión encontrada',
     };
   }
