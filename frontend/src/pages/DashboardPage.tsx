@@ -1,69 +1,82 @@
-import { useQuery } from '@tanstack/react-query';
-import { Users, ClipboardList, FileText, Calendar } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import api from '../api/client';
+import { useQuery } from "@tanstack/react-query";
+import { Users, ClipboardList, FileText, Calendar } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
+import api from "../api/client";
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const { data: patients = [] } = useQuery({
-    queryKey: ['patients'],
-    queryFn: () => api.get('/patients').then(r => r.data),
+    queryKey: ["patients"],
+    queryFn: () => api.get("/patients").then((r) => r.data),
   });
 
   const { data: consultations = [] } = useQuery({
-    queryKey: ['consultations-all'],
-    queryFn: () => api.get('/patients').then(async (r) => {
-      const all = await Promise.all(
-        r.data.map((p: any) =>
-          api.get(`/consultations/patient/${p.id}`).then(c => c.data)
-        )
-      );
-      return all.flat();
-    }),
+    queryKey: ["consultations-all"],
+    queryFn: () =>
+      api.get("/patients").then(async (r) => {
+        const all = await Promise.all(
+          r.data.map((p: any) =>
+            api.get(`/consultations/patient/${p.id}`).then((c) => c.data),
+          ),
+        );
+        return all.flat();
+      }),
   });
 
   const stats = [
     {
-      label: 'Pacientes activos',
+      label: "Pacientes activos",
       value: patients.length,
       icon: Users,
-      color: 'text-sage-600',
-      bg: 'bg-sage-50',
+      color: "text-sage-600",
+      bg: "bg-sage-50",
+      route: "/patients",
     },
     {
-      label: 'Consultas registradas',
+      label: "Consultas registradas",
       value: consultations.length,
       icon: ClipboardList,
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      route: "/consultations",
     },
     {
-      label: 'Consentimientos firmados',
+      label: "Consentimientos firmados",
       value: patients.filter((p: any) => p.consentSigned).length,
       icon: FileText,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
+      color: "text-emerald-600",
+      bg: "bg-emerald-50",
+      route: "/patients",
     },
     {
-      label: 'Próximas sesiones',
-      value: consultations.filter((c: any) =>
-        c.nextSessionDate && new Date(c.nextSessionDate) >= new Date()
+      label: "Próximas sesiones",
+      value: consultations.filter(
+        (c: any) =>
+          c.nextSessionDate && new Date(c.nextSessionDate) >= new Date(),
       ).length,
       icon: Calendar,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+      route: "/consultations",
     },
   ];
 
   return (
     <div className="p-4 md:p-8">
-      {/* Header */}
       <div className="mb-6 md:mb-8">
-        <h2 className="font-display text-2xl md:text-3xl text-slate-900">Dashboard</h2>
+        <h2 className="font-display text-2xl md:text-3xl text-slate-900">
+          Dashboard
+        </h2>
         <p className="text-slate-500 text-sm mt-1">
-          Bienvenida, {user?.name ?? user?.email} — {new Date().toLocaleDateString('es-CL', {
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+          Bienvenida, {user?.name ?? user?.email} —{" "}
+          {new Date().toLocaleDateString("es-CL", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
           })}
         </p>
       </div>
@@ -71,12 +84,18 @@ export default function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5 mb-6 md:mb-8">
         {stats.map((stat) => (
-          <div key={stat.label} className="card flex items-center gap-3 p-4 md:p-6">
+          <div
+            key={stat.label}
+            onClick={() => navigate(stat.route)}
+            className="card flex items-center gap-3 p-4 md:p-6 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all"
+          >
             <div className={`${stat.bg} p-2 md:p-3 rounded-lg shrink-0`}>
               <stat.icon size={18} className={stat.color} />
             </div>
             <div className="min-w-0">
-              <p className="text-xl md:text-2xl font-display text-slate-900">{stat.value}</p>
+              <p className="text-xl md:text-2xl font-display text-slate-900">
+                {stat.value}
+              </p>
               <p className="text-xs text-slate-500 truncate">{stat.label}</p>
             </div>
           </div>
@@ -85,9 +104,17 @@ export default function DashboardPage() {
 
       {/* Pacientes recientes */}
       <div className="card p-4 md:p-6">
-        <h3 className="font-display text-lg md:text-xl text-slate-900 mb-4">
-          Pacientes recientes
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-lg md:text-xl text-slate-900">
+            Pacientes recientes
+          </h3>
+          <button
+            onClick={() => navigate("/patients")}
+            className="text-xs text-sage-600 hover:underline"
+          >
+            Ver todos →
+          </button>
+        </div>
         {patients.length === 0 ? (
           <p className="text-slate-400 text-sm text-center py-8">
             No hay pacientes registrados aún.
@@ -95,9 +122,15 @@ export default function DashboardPage() {
         ) : (
           <div className="divide-y divide-slate-100">
             {patients.slice(0, 5).map((p: any) => (
-              <div key={p.id} className="py-3 flex items-center justify-between gap-2">
+              <div
+                key={p.id}
+                onClick={() => navigate("/patients")}
+                className="py-3 flex items-center justify-between gap-2 cursor-pointer hover:bg-cream-50 rounded-lg px-2 -mx-2 transition-colors"
+              >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-800 truncate">{p.fullName}</p>
+                  <p className="text-sm font-medium text-slate-800 truncate">
+                    {p.fullName}
+                  </p>
                   <p className="text-xs text-slate-400">{p.rut}</p>
                 </div>
                 <div className="shrink-0">
