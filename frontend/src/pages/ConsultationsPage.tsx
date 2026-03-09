@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ClipboardPlus, Search, X, ChevronDown, ChevronUp, Pencil, AlertCircle } from 'lucide-react';
 import api from '../api/client';
+import { buildLocalISO, formatChileDateTime, formatChileDate } from '../utils/datetime';
 
 interface Consultation {
   id: string;
@@ -39,8 +40,6 @@ export default function ConsultationsPage() {
   const [showPatientList, setShowPatientList] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
-
-  // Edición (versionado)
   const [editingConsultation, setEditingConsultation] = useState<Consultation | null>(null);
   const [editForm, setEditForm] = useState({
     sessionDate: '', sessionTime: '09:00',
@@ -61,12 +60,6 @@ export default function ConsultationsPage() {
       : Promise.resolve([]),
     enabled: !!selectedPatientId,
   });
-
-  // Combina fecha + hora en ISO string
-  const buildDateTime = (date: string, time: string) => {
-    if (!date) return '';
-    return `${date}T${time}:00`;
-  };
 
   const createMutation = useMutation({
     mutationFn: (data: any) => api.post('/consultations', data),
@@ -101,12 +94,12 @@ export default function ConsultationsPage() {
     setFormError('');
     createMutation.mutate({
       patientId: form.patientId,
-      sessionDate: buildDateTime(form.sessionDate, form.sessionTime),
+      sessionDate: buildLocalISO(form.sessionDate, form.sessionTime),
       consultReason: form.consultReason,
       intervention: form.intervention,
       agreements: form.agreements,
       nextSessionDate: form.nextSessionDate
-        ? buildDateTime(form.nextSessionDate, form.nextSessionTime)
+        ? buildLocalISO(form.nextSessionDate, form.nextSessionTime)
         : undefined,
       sessionType: form.sessionType,
     });
@@ -115,14 +108,16 @@ export default function ConsultationsPage() {
   const handleEditOpen = (c: Consultation) => {
     const sd = new Date(c.sessionDate);
     const nd = c.nextSessionDate ? new Date(c.nextSessionDate) : null;
+    const toLocalDate = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' });
+    const toLocalTime = (d: Date) => d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
     setEditForm({
-      sessionDate: sd.toISOString().split('T')[0],
-      sessionTime: sd.toTimeString().slice(0, 5),
+      sessionDate: toLocalDate(sd),
+      sessionTime: toLocalTime(sd),
       consultReason: c.consultReason,
       intervention: c.intervention,
       agreements: c.agreements ?? '',
-      nextSessionDate: nd ? nd.toISOString().split('T')[0] : '',
-      nextSessionTime: nd ? nd.toTimeString().slice(0, 5) : '09:00',
+      nextSessionDate: nd ? toLocalDate(nd) : '',
+      nextSessionTime: nd ? toLocalTime(nd) : '09:00',
       sessionType: c.sessionType,
     });
     setEditingConsultation(c);
@@ -133,12 +128,12 @@ export default function ConsultationsPage() {
     correctMutation.mutate({
       id: editingConsultation.id,
       data: {
-        sessionDate: buildDateTime(editForm.sessionDate, editForm.sessionTime),
+        sessionDate: buildLocalISO(editForm.sessionDate, editForm.sessionTime),
         consultReason: editForm.consultReason,
         intervention: editForm.intervention,
         agreements: editForm.agreements,
         nextSessionDate: editForm.nextSessionDate
-          ? buildDateTime(editForm.nextSessionDate, editForm.nextSessionTime)
+          ? buildLocalISO(editForm.nextSessionDate, editForm.nextSessionTime)
           : undefined,
         sessionType: editForm.sessionType,
       },
@@ -151,18 +146,6 @@ export default function ConsultationsPage() {
   );
 
   const selectedPatient = patients.find((p: Patient) => p.id === selectedPatientId);
-
-  const formatDateTime = (dateStr: string) =>
-    new Date(dateStr).toLocaleString('es-CL', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('es-CL', {
-      year: 'numeric', month: 'long', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
 
   return (
     <div className="p-4 md:p-8">
@@ -271,21 +254,19 @@ export default function ConsultationsPage() {
               <div>
                 <h3 className="font-display text-xl text-slate-900">Corregir Sesión</h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Se creará una nueva versión (v{editingConsultation.version + 1}). La versión anterior quedará marcada como corregida.
+                  Se creará v{editingConsultation.version + 1}. La versión anterior quedará marcada como corregida.
                 </p>
               </div>
               <button onClick={() => setEditingConsultation(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={20} />
               </button>
             </div>
-
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex gap-2">
               <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700">
-                Por normativa clínica, las sesiones no se eliminan ni sobreescriben. Esta corrección genera un nuevo registro versionado manteniendo la trazabilidad del historial.
+                Por normativa clínica las sesiones no se eliminan ni sobreescriben. Esta corrección genera un nuevo registro versionado manteniendo la trazabilidad del historial.
               </p>
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Fecha de sesión</label>
@@ -348,7 +329,6 @@ export default function ConsultationsPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Lista de pacientes */}
         <div className="card p-0 overflow-hidden">
           <button
             onClick={() => setShowPatientList(!showPatientList)}
@@ -387,7 +367,6 @@ export default function ConsultationsPage() {
           )}
         </div>
 
-        {/* Historial de consultas */}
         <div className="lg:col-span-2 space-y-4">
           {!selectedPatientId ? (
             <div className="card flex items-center justify-center h-48">
@@ -405,16 +384,14 @@ export default function ConsultationsPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <p className="font-medium text-slate-800 text-sm md:text-base capitalize">
-                      {formatDateTime(c.sessionDate)}
+                      {formatChileDateTime(c.sessionDate)}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-1">
                       <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
                         v{c.version}
                       </span>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        c.sessionType === 'TELEMED'
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'bg-sage-50 text-sage-600'
+                        c.sessionType === 'TELEMED' ? 'bg-blue-50 text-blue-600' : 'bg-sage-50 text-sage-600'
                       }`}>
                         {c.sessionType === 'TELEMED' ? 'Telemedicina' : 'Presencial'}
                       </span>
@@ -426,16 +403,14 @@ export default function ConsultationsPage() {
                     </div>
                   </div>
                   {!c.isCorrected && (
-                    <button
-                      onClick={() => handleEditOpen(c)}
+                    <button onClick={() => handleEditOpen(c)}
                       className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
-                      title="Corregir sesión"
-                    >
+                      title="Corregir sesión">
                       <Pencil size={14} />
                     </button>
                   )}
                 </div>
-                <div className="space-y-3 text-sm text-slate-700">
+                <div className="space-y-3 text-sm">
                   <div>
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Motivo</p>
                     <p className="text-slate-800">{c.consultReason}</p>
@@ -454,7 +429,7 @@ export default function ConsultationsPage() {
                     <div className="pt-2 border-t border-slate-100">
                       <p className="text-xs text-slate-400">
                         Próxima sesión: <span className="font-medium text-slate-600">
-                          {formatDate(c.nextSessionDate)}
+                          {formatChileDate(c.nextSessionDate)}
                         </span>
                       </p>
                     </div>
