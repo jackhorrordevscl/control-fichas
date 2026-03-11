@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, Trash2, Shield, User, X, Crown, Users, Check } from 'lucide-react';
+import { UserPlus, Trash2, Shield, User, X, Crown, Users, Check, Pencil, Eye, EyeOff } from 'lucide-react';
 import api from '../api/client';
 
 interface UserItem {
@@ -39,7 +39,6 @@ const roleIcon = (role: string) => {
   }
 };
 
-// Roles que pueden editar roles de otros usuarios
 const CAN_EDIT_ROLES = ['ADMIN', 'DIRECTOR', 'COORDINATOR'];
 
 export default function UsersPage() {
@@ -48,10 +47,16 @@ export default function UsersPage() {
   const canEditRoles = CAN_EDIT_ROLES.includes(currentUser?.role);
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    email: '', name: '', password: '', role: 'THERAPIST',
-  });
+  const [form, setForm] = useState({ email: '', name: '', password: '', role: 'THERAPIST' });
   const [error, setError] = useState('');
+
+  // Edit modal state
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', role: '', password: '' });
+  const [editError, setEditError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Inline role editing (mantener para compatibilidad móvil)
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [editingRole, setEditingRole] = useState('');
 
@@ -70,6 +75,20 @@ export default function UsersPage() {
     },
     onError: (err: any) => {
       setError(err.response?.data?.message ?? 'Error al crear usuario');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      api.patch(`/users/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setEditingUser(null);
+      setEditError('');
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.message;
+      setEditError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Error al actualizar usuario'));
     },
   });
 
@@ -98,6 +117,31 @@ export default function UsersPage() {
     deleteMutation.mutate(u.id);
   };
 
+  const handleOpenEdit = (u: UserItem) => {
+    setEditingUser(u);
+    setEditForm({ name: u.name, email: u.email, role: u.role, password: '' });
+    setEditError('');
+    setShowPassword(false);
+  };
+
+  const handleSubmitEdit = () => {
+    if (!editingUser) return;
+    if (!editForm.name.trim()) { setEditError('El nombre es obligatorio'); return; }
+    if (!editForm.email.trim()) { setEditError('El email es obligatorio'); return; }
+    if (editForm.password && editForm.password.length < 8) {
+      setEditError('La contraseña debe tener al menos 8 caracteres'); return;
+    }
+
+    const data: any = {
+      name: editForm.name,
+      email: editForm.email,
+      role: editForm.role,
+    };
+    if (editForm.password) data.password = editForm.password;
+
+    updateMutation.mutate({ id: editingUser.id, data });
+  };
+
   const handleRoleClick = (u: UserItem) => {
     if (!canEditRoles) return;
     setEditingRoleId(u.id);
@@ -122,19 +166,12 @@ export default function UsersPage() {
               <option key={r.value} value={r.value}>{r.label}</option>
             ))}
           </select>
-          <button
-            onClick={() => handleRoleSave(u.id)}
-            disabled={updateRoleMutation.isPending}
-            className="p-1 hover:bg-green-50 rounded text-green-600 transition-colors"
-            title="Guardar"
-          >
+          <button onClick={() => handleRoleSave(u.id)} disabled={updateRoleMutation.isPending}
+            className="p-1 hover:bg-green-50 rounded text-green-600 transition-colors" title="Guardar">
             <Check size={14} />
           </button>
-          <button
-            onClick={() => setEditingRoleId(null)}
-            className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors"
-            title="Cancelar"
-          >
+          <button onClick={() => setEditingRoleId(null)}
+            className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Cancelar">
             <X size={14} />
           </button>
         </div>
@@ -170,7 +207,7 @@ export default function UsersPage() {
         </button>
       </div>
 
-      {/* Formulario */}
+      {/* Formulario nuevo usuario */}
       {showForm && (
         <div className="card mb-6">
           <div className="flex items-center justify-between mb-4">
@@ -262,10 +299,16 @@ export default function UsersPage() {
                     {new Date(u.createdAt).toLocaleDateString('es-CL')}
                   </td>
                   <td className="px-6 py-4">
-                    <button onClick={() => handleDelete(u)}
-                      className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 transition-colors">
-                      <Trash2 size={15} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => handleOpenEdit(u)}
+                        className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-400 transition-colors" title="Editar">
+                        <Pencil size={15} />
+                      </button>
+                      <button onClick={() => handleDelete(u)}
+                        className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 transition-colors" title="Eliminar">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -293,10 +336,16 @@ export default function UsersPage() {
                     <p className="text-xs text-slate-400">{u.email}</p>
                   </div>
                 </div>
-                <button onClick={() => handleDelete(u)}
-                  className="p-1.5 hover:bg-red-50 rounded-lg text-red-400">
-                  <Trash2 size={15} />
-                </button>
+                <div className="flex gap-1">
+                  <button onClick={() => handleOpenEdit(u)}
+                    className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-400">
+                    <Pencil size={15} />
+                  </button>
+                  <button onClick={() => handleDelete(u)}
+                    className="p-1.5 hover:bg-red-50 rounded-lg text-red-400">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </div>
               <div className="flex gap-2 mt-2 flex-wrap">
                 <RoleCell u={u} />
@@ -310,6 +359,82 @@ export default function UsersPage() {
           ))
         )}
       </div>
+
+      {/* Modal edición */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h3 className="font-display text-xl text-slate-900">Editar Usuario</h3>
+                <p className="text-slate-400 text-sm">{editingUser.email}</p>
+              </div>
+              <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Nombre completo *</label>
+                <input className="input-field" value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Email *</label>
+                <input type="email" className="input-field" value={editForm.email}
+                  onChange={e => setEditForm({ ...editForm, email: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Rol</label>
+                <select className="input-field" value={editForm.role}
+                  onChange={e => setEditForm({ ...editForm, role: e.target.value })}>
+                  {ROLES.map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Nueva contraseña <span className="text-slate-400 font-normal">(dejar vacío para no cambiar)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className="input-field pr-10"
+                    placeholder="Mínimo 8 caracteres"
+                    value={editForm.password}
+                    onChange={e => setEditForm({ ...editForm, password: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {editError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
+                <p className="text-red-600 text-sm">{editError}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button onClick={handleSubmitEdit} className="btn-primary flex-1"
+                disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+              <button onClick={() => setEditingUser(null)} className="btn-secondary">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
