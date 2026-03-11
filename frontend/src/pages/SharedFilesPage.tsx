@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Upload, Download, Trash2, FileText, Image,
-  BookOpen, File, Search, X, Plus, AlertCircle,
+  BookOpen, File, Search, X, Plus, AlertCircle, Pencil, ExternalLink,
 } from 'lucide-react';
 import api from '../api/client';
 
@@ -36,6 +36,10 @@ const formatSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+// Determina si el archivo se puede previsualizar en el browser
+const isPreviewable = (mimetype: string) =>
+  ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimetype);
+
 interface SharedFile {
   id: string;
   name: string;
@@ -66,6 +70,12 @@ export default function SharedFilesPage() {
     file: null as File | null,
   });
 
+  // Edit modal state
+  const [editingFile, setEditingFile] = useState<SharedFile | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', description: '', category: '' });
+  const [editError, setEditError] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
   const { data: files = [], isLoading } = useQuery<SharedFile[]>({
     queryKey: ['shared-files', category],
     queryFn: () =>
@@ -79,7 +89,7 @@ export default function SharedFilesPage() {
 
     const fd = new FormData();
     fd.append('file', form.file);
-    fd.append('name', form.name);
+    fd.append('name', form.name.trim());
     fd.append('description', form.description);
     fd.append('category', form.category);
 
@@ -93,13 +103,22 @@ export default function SharedFilesPage() {
       queryClient.invalidateQueries({ queryKey: ['shared-files'] });
     } catch (e: any) {
       const msg = e?.response?.data?.message;
-      if (msg) {
-        setUploadError(msg);
-      } else {
-        setUploadError('Error al subir el archivo. Intenta nuevamente.');
-      }
+      setUploadError(msg ?? 'Error al subir el archivo. Intenta nuevamente.');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handlePreview = async (file: SharedFile) => {
+    try {
+      const res = await api.get(`/shared-files/${file.id}/download`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], { type: file.mimetype });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch {
+      setError('Error al abrir el archivo');
     }
   };
 
@@ -130,10 +149,41 @@ export default function SharedFilesPage() {
     }
   };
 
+  const handleOpenEdit = (file: SharedFile) => {
+    setEditingFile(file);
+    setEditForm({ name: file.name, description: file.description ?? '', category: file.category });
+    setEditError('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingFile) return;
+    if (!editForm.name.trim()) { setEditError('El nombre es obligatorio'); return; }
+    setEditSaving(true);
+    setEditError('');
+    try {
+      await api.patch(`/shared-files/${editingFile.id}`, {
+        name: editForm.name.trim(),
+        description: editForm.description,
+        category: editForm.category,
+      });
+      queryClient.invalidateQueries({ queryKey: ['shared-files'] });
+      setEditingFile(null);
+    } catch (e: any) {
+      const msg = e?.response?.data?.message;
+      setEditError(msg ?? 'Error al guardar');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const filtered = files.filter(f =>
     f.name.toLowerCase().includes(search.toLowerCase()) ||
     f.uploadedBy?.name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const canEdit = (file: SharedFile) =>
+    ['DIRECTOR', 'ADMIN'].includes(user?.role) ||
+    file.uploadedBy?.name === user?.name;
 
   const canDelete = (file: SharedFile) =>
     ['DIRECTOR', 'ADMIN'].includes(user?.role) ||
@@ -201,8 +251,17 @@ export default function SharedFilesPage() {
           {filtered.map(file => (
             <div key={file.id} className="flex items-center gap-4 bg-white border border-slate-100 rounded-xl p-4 hover:shadow-sm transition-shadow">
               <div className="flex-shrink-0">{categoryIcon(file.category)}</div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-slate-800 truncate">{file.name}</p>
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => handlePreview(file)}
+                title="Clic para abrir en nueva pestaña"
+              >
+                <p className="font-medium text-slate-800 truncate hover:text-indigo-600 transition-colors flex items-center gap-1">
+                  {file.name}
+                  {isPreviewable(file.mimetype) && (
+                    <ExternalLink className="w-3 h-3 text-slate-300 inline shrink-0" />
+                  )}
+                </p>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {file.originalName} · {formatSize(file.size)} · Subido por {file.uploadedBy?.name ?? 'Desconocido'}
                 </p>
@@ -210,15 +269,23 @@ export default function SharedFilesPage() {
                   <p className="text-xs text-slate-500 mt-1 truncate">{file.description}</p>
                 )}
               </div>
-              <span className="hidden sm:inline text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full">
+              <span className="hidden sm:inline text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full shrink-0">
                 {CATEGORIES.find(c => c.value === file.category)?.label ?? file.category}
               </span>
-              <div className="flex items-center gap-2">
-                <button onClick={() => handleDownload(file)} className="p-2 rounded-lg hover:bg-indigo-50 text-indigo-600 transition-colors" title="Descargar">
+              <div className="flex items-center gap-1 shrink-0">
+                {canEdit(file) && (
+                  <button onClick={() => handleOpenEdit(file)}
+                    className="p-2 rounded-lg hover:bg-blue-50 text-blue-400 transition-colors" title="Editar">
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
+                <button onClick={() => handleDownload(file)}
+                  className="p-2 rounded-lg hover:bg-indigo-50 text-indigo-600 transition-colors" title="Descargar">
                   <Download className="w-4 h-4" />
                 </button>
                 {canDelete(file) && (
-                  <button onClick={() => handleDelete(file.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Eliminar">
+                  <button onClick={() => handleDelete(file.id)}
+                    className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Eliminar">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}
@@ -228,6 +295,7 @@ export default function SharedFilesPage() {
         </div>
       )}
 
+      {/* Modal subir archivo */}
       {showUpload && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-xl p-6">
@@ -257,7 +325,12 @@ export default function SharedFilesPage() {
                 className="hidden"
                 onChange={e => {
                   const f = e.target.files?.[0];
-                  if (f) setForm(prev => ({ ...prev, file: f, name: prev.name || f.name }));
+                  if (f) setForm(prev => ({
+                    ...prev,
+                    file: f,
+                    // Pre-rellenar nombre con el nombre del archivo sin extensión
+                    name: prev.name || f.name.replace(/\.[^/.]+$/, ''),
+                  }));
                 }}
               />
             </div>
@@ -275,13 +348,18 @@ export default function SharedFilesPage() {
             </div>
 
             <div className="space-y-3">
-              <input
-                type="text"
-                placeholder="Nombre descriptivo *"
-                value={form.name}
-                onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-              />
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Nombre del archivo <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Protocolo de atención 2026"
+                  value={form.name}
+                  onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                />
+              </div>
               <select
                 value={form.category}
                 onChange={e => setForm(prev => ({ ...prev, category: e.target.value }))}
@@ -320,6 +398,78 @@ export default function SharedFilesPage() {
                 className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 {uploading ? 'Subiendo...' : 'Subir archivo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal editar archivo */}
+      {editingFile && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-slate-800">Editar archivo</h2>
+              <button onClick={() => setEditingFile(null)}>
+                <X className="w-5 h-5 text-slate-400 hover:text-slate-600" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Nombre <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Categoría</label>
+                <select
+                  value={editForm.category}
+                  onChange={e => setEditForm(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                >
+                  {CATEGORIES.filter(c => c.value).map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                  rows={3}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+                />
+              </div>
+            </div>
+
+            {editError && (
+              <div className="mt-3 flex items-start gap-2 bg-red-50 border border-red-100 rounded-lg p-3">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-red-600 text-xs">{editError}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setEditingFile(null)}
+                className="flex-1 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editSaving}
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {editSaving ? 'Guardando...' : 'Guardar cambios'}
               </button>
             </div>
           </div>
