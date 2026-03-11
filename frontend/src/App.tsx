@@ -1,6 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useState, useCallback } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { useIdleTimeout } from './hooks/useIdleTimeout';
+import IdleWarningModal from './components/IdleWarningModal';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import PatientsPage from './pages/PatientsPage';
@@ -15,6 +18,38 @@ const queryClient = new QueryClient();
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+}
+
+function IdleManager() {
+  const { isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+  const [showWarning, setShowWarning] = useState(false);
+
+  const handleWarn = useCallback(() => {
+    if (isAuthenticated) setShowWarning(true);
+  }, [isAuthenticated]);
+
+  const handleLogout = useCallback(() => {
+    setShowWarning(false);
+    logout();
+    navigate('/login');
+  }, [logout, navigate]);
+
+  const { extend } = useIdleTimeout({
+    onWarn: handleWarn,
+    onLogout: handleLogout,
+  });
+
+  const handleExtend = useCallback(() => {
+    setShowWarning(false);
+    extend();
+  }, [extend]);
+
+  if (!isAuthenticated) return null;
+
+  return showWarning ? (
+    <IdleWarningModal onExtend={handleExtend} onLogout={handleLogout} />
+  ) : null;
 }
 
 function AppRoutes() {
@@ -46,6 +81,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
+          <IdleManager />
           <AppRoutes />
         </BrowserRouter>
       </AuthProvider>
