@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-const IDLE_TIMEOUT = 5 * 1000;  // 8 min → muestra aviso
-const WARN_DURATION = 10 * 1000; // 2 min → logout
+const IDLE_TIMEOUT = 8 * 60 * 1000;  // 8 min → muestra aviso
+const WARN_DURATION = 2 * 60 * 1000; // 2 min → logout
 
 interface UseIdleTimeoutOptions {
   onWarn: () => void;
