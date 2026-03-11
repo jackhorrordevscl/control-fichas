@@ -47,6 +47,7 @@ export default function ConsultationsPage() {
     nextSessionDate: '', nextSessionTime: '09:00',
     sessionType: 'IN_PERSON',
   });
+  const [expandedHistory, setExpandedHistory] = useState<Set<string>>(new Set());
 
   const { data: patients = [] } = useQuery({
     queryKey: ['patients'],
@@ -140,12 +141,38 @@ export default function ConsultationsPage() {
     });
   };
 
+  const toggleHistory = (id: string) => {
+    setExpandedHistory(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
   const filteredPatients = patients.filter((p: Patient) =>
     p.fullName.toLowerCase().includes(search.toLowerCase()) ||
     p.rut.includes(search)
   );
 
   const selectedPatient = patients.find((p: Patient) => p.id === selectedPatientId);
+
+  // Separar versiones activas de corregidas
+  const activeConsultations = consultations.filter((c: Consultation) => !c.isCorrected);
+  const correctedConsultations = consultations.filter((c: Consultation) => c.isCorrected);
+
+  const getVersionHistory = (c: Consultation): Consultation[] => {
+    const history: Consultation[] = [];
+    let current = c;
+    while (current.previousVersionId) {
+      const prev = correctedConsultations.find(
+        (x: Consultation) => x.id === current.previousVersionId
+      );
+      if (!prev) break;
+      history.push(prev);
+      current = prev;
+    }
+    return history;
+  };
 
   return (
     <div className="p-4 md:p-8">
@@ -289,21 +316,18 @@ export default function ConsultationsPage() {
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-slate-600 mb-1">Motivo de consulta</label>
                 <textarea rows={2} className="input-field resize-none text-slate-800 placeholder-slate-400"
-                  placeholder="Describe el motivo principal de la sesión..."
                   value={editForm.consultReason}
                   onChange={e => setEditForm({ ...editForm, consultReason: e.target.value })} />
               </div>
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-slate-600 mb-1">Intervención realizada</label>
                 <textarea rows={3} className="input-field resize-none text-slate-800 placeholder-slate-400"
-                  placeholder="Describe las técnicas e intervenciones realizadas..."
                   value={editForm.intervention}
                   onChange={e => setEditForm({ ...editForm, intervention: e.target.value })} />
               </div>
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-slate-600 mb-1">Tareas y acuerdos</label>
                 <textarea rows={2} className="input-field resize-none text-slate-800 placeholder-slate-400"
-                  placeholder="Tareas asignadas, acuerdos terapéuticos..."
                   value={editForm.agreements}
                   onChange={e => setEditForm({ ...editForm, agreements: e.target.value })} />
               </div>
@@ -374,70 +398,119 @@ export default function ConsultationsPage() {
                 Selecciona un paciente para ver su historial
               </p>
             </div>
-          ) : consultations.length === 0 ? (
+          ) : activeConsultations.length === 0 ? (
             <div className="card flex items-center justify-center h-48">
               <p className="text-slate-400 text-sm">Sin consultas registradas</p>
             </div>
           ) : (
-            consultations.map((c: Consultation) => (
-              <div key={c.id} className={`card ${c.isCorrected ? 'opacity-50 border-dashed' : ''}`}>
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <p className="font-medium text-slate-800 text-sm md:text-base capitalize">
-                      {formatChileDateTime(c.sessionDate)}
-                    </p>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                        v{c.version}
-                      </span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        c.sessionType === 'TELEMED' ? 'bg-blue-50 text-blue-600' : 'bg-sage-50 text-sage-600'
-                      }`}>
-                        {c.sessionType === 'TELEMED' ? 'Telemedicina' : 'Presencial'}
-                      </span>
-                      {c.isCorrected && (
-                        <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">
-                          Corregida
-                        </span>
+            activeConsultations.map((c: Consultation) => {
+              const history = getVersionHistory(c);
+              const isExpanded = expandedHistory.has(c.id);
+
+              return (
+                <div key={c.id}>
+                  {/* Versión activa */}
+                  <div className="card">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="font-medium text-slate-800 text-sm md:text-base capitalize">
+                          {formatChileDateTime(c.sessionDate)}
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                            v{c.version}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            c.sessionType === 'TELEMED' ? 'bg-blue-50 text-blue-600' : 'bg-sage-50 text-sage-600'
+                          }`}>
+                            {c.sessionType === 'TELEMED' ? 'Telemedicina' : 'Presencial'}
+                          </span>
+                        </div>
+                      </div>
+                      <button onClick={() => handleEditOpen(c)}
+                        className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                        title="Corregir sesión">
+                        <Pencil size={14} />
+                      </button>
+                    </div>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Motivo</p>
+                        <p className="text-slate-800">{c.consultReason}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Intervención</p>
+                        <p className="text-slate-800">{c.intervention}</p>
+                      </div>
+                      {c.agreements && (
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Acuerdos</p>
+                          <p className="text-slate-800">{c.agreements}</p>
+                        </div>
                       )}
+                      {c.nextSessionDate && (
+                        <div className="pt-2 border-t border-slate-100">
+                          <p className="text-xs text-slate-400">
+                            Próxima sesión: <span className="font-medium text-slate-600">
+                              {formatChileDate(c.nextSessionDate)}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-xs text-slate-400">Terapeuta: {c.therapist?.name}</p>
                     </div>
+
+                    {/* Botón ver historial */}
+                    {history.length > 0 && (
+                      <button
+                        onClick={() => toggleHistory(c.id)}
+                        className="mt-3 pt-3 border-t border-slate-100 w-full flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        {isExpanded ? 'Ocultar' : 'Ver'} {history.length} versión{history.length > 1 ? 'es' : ''} anterior{history.length > 1 ? 'es' : ''}
+                      </button>
+                    )}
                   </div>
-                  {!c.isCorrected && (
-                    <button onClick={() => handleEditOpen(c)}
-                      className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
-                      title="Corregir sesión">
-                      <Pencil size={14} />
-                    </button>
-                  )}
+
+                  {/* Versiones anteriores expandibles */}
+                  {isExpanded && history.map((prev) => (
+                    <div key={prev.id} className="card mt-2 ml-4 opacity-60 border-dashed border-amber-200 bg-amber-50/30">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="text-xs font-medium text-slate-600">
+                            {formatChileDateTime(prev.sessionDate)}
+                          </p>
+                          <div className="flex gap-2 mt-1">
+                            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                              v{prev.version}
+                            </span>
+                            <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">
+                              Versión corregida
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-2 text-xs text-slate-600">
+                        <div>
+                          <p className="font-medium text-slate-500 uppercase tracking-wide mb-0.5">Motivo</p>
+                          <p>{prev.consultReason}</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-500 uppercase tracking-wide mb-0.5">Intervención</p>
+                          <p>{prev.intervention}</p>
+                        </div>
+                        {prev.agreements && (
+                          <div>
+                            <p className="font-medium text-slate-500 uppercase tracking-wide mb-0.5">Acuerdos</p>
+                            <p>{prev.agreements}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Motivo</p>
-                    <p className="text-slate-800">{c.consultReason}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Intervención</p>
-                    <p className="text-slate-800">{c.intervention}</p>
-                  </div>
-                  {c.agreements && (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Acuerdos</p>
-                      <p className="text-slate-800">{c.agreements}</p>
-                    </div>
-                  )}
-                  {c.nextSessionDate && (
-                    <div className="pt-2 border-t border-slate-100">
-                      <p className="text-xs text-slate-400">
-                        Próxima sesión: <span className="font-medium text-slate-600">
-                          {formatChileDate(c.nextSessionDate)}
-                        </span>
-                      </p>
-                    </div>
-                  )}
-                  <p className="text-xs text-slate-400">Terapeuta: {c.therapist?.name}</p>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
