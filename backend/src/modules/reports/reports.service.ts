@@ -72,6 +72,9 @@ export class ReportsService {
       doc.text(`Psiquiatra tratante: ${patient.treatingPsychiatrist ?? 'No registrado'}`);
       doc.text(`Médico tratante: ${patient.treatingDoctor ?? 'No registrado'}`);
 
+      // ── PSICÓLOGO TRATANTE ───────────────────────────────
+      doc.text(`Psicólogo/a tratante: ${patient.therapist?.name ?? 'No asignado'}`);
+
       doc.moveDown();
       doc.text(`Consentimiento informado: ${patient.consentSigned ? 'Firmado' : 'Pendiente'}`);
       doc.text(`Acuerdo telemedicina: ${patient.telemedConsentSigned ? 'Firmado' : 'Pendiente'}`);
@@ -87,16 +90,55 @@ export class ReportsService {
         doc.fontSize(10).font('Helvetica').text('Sin consultas registradas.');
       } else {
         patient.consultations.forEach((c, index) => {
-          doc.fontSize(11).font('Helvetica-Bold')
-            .text(`Sesión ${index + 1} — ${new Date(c.sessionDate).toLocaleDateString('es-CL')} (v${c.version}${c.isCorrected ? ' - CORREGIDA' : ''})`);
+          // Título de sesión con mejor espaciado
+          doc.moveDown(0.5);
+          doc
+            .rect(50, doc.y, 500, 20)
+            .fill('#f1f5f9');
+
+          doc
+            .fillColor('#1e293b')
+            .fontSize(11)
+            .font('Helvetica-Bold')
+            .text(
+              `Sesión ${index + 1}  —  ${new Date(c.sessionDate).toLocaleDateString('es-CL')}  (v${c.version}${c.isCorrected ? ' · CORREGIDA' : ''})`,
+              50, doc.y - 16,
+              { width: 500 }
+            );
+
+          doc.fillColor('#000000');
+          doc.moveDown(0.8);
 
           doc.fontSize(10).font('Helvetica');
           doc.text(`Tipo: ${c.sessionType === 'IN_PERSON' ? 'Presencial' : 'Telemedicina'}`);
-          doc.text(`Motivo de consulta: ${c.consultReason}`);
-          doc.text(`Intervención: ${c.intervention}`);
-          doc.text(`Acuerdos: ${c.agreements ?? 'Ninguno'}`);
-          doc.text(`Próxima sesión: ${c.nextSessionDate ? new Date(c.nextSessionDate).toLocaleDateString('es-CL') : 'No agendada'}`);
-          doc.moveDown();
+
+          doc.moveDown(0.3);
+          doc.font('Helvetica-Bold').text('Motivo de consulta:', { continued: false });
+          doc.font('Helvetica').text(c.consultReason, {
+            align: 'justify',
+            width: 500,
+          });
+
+          doc.moveDown(0.3);
+          doc.font('Helvetica-Bold').text('Intervención:', { continued: false });
+          doc.font('Helvetica').text(c.intervention, {
+            align: 'justify',
+            width: 500,
+          });
+
+          doc.moveDown(0.3);
+          doc.font('Helvetica-Bold').text('Acuerdos:', { continued: false });
+          doc.font('Helvetica').text(c.agreements ?? 'Ninguno', {
+            align: 'justify',
+            width: 500,
+          });
+
+          doc.moveDown(0.3);
+          doc.text(
+            `Próxima sesión: ${c.nextSessionDate ? new Date(c.nextSessionDate).toLocaleDateString('es-CL') : 'No agendada'}`
+          );
+
+          doc.moveDown(1);
         });
       }
 
