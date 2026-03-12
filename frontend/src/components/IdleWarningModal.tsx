@@ -1,30 +1,31 @@
-import { useEffect, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 
 interface IdleWarningModalProps {
   onExtend: () => void;
   onLogout: () => void;
 }
 
-export default function IdleWarningModal({ onExtend, onLogout }: IdleWarningModalProps) {
-  const [seconds, setSeconds] = useState(120);
+export default function IdleWarningModal({
+  onExtend,
+  onLogout,
+}: IdleWarningModalProps) {
+  const [seconds, setSeconds] = useState(119);
 
   useEffect(() => {
+    if (seconds <= 0) {
+      onLogout();
+      return;
+    }
     const interval = setInterval(() => {
-      setSeconds((s) => {
-        if (s <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return s - 1;
-      });
+      setSeconds((s) => s - 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [seconds, onLogout]);
 
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
-  const countdown = `${minutes}:${secs.toString().padStart(2, '0')}`;
+  const countdown = `${minutes}:${secs.toString().padStart(2, "0")}`;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
@@ -42,16 +43,10 @@ export default function IdleWarningModal({ onExtend, onLogout }: IdleWarningModa
           {countdown}
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={onExtend}
-            className="btn-primary flex-1"
-          >
+          <button onClick={onExtend} className="btn-primary flex-1">
             Continuar sesión
           </button>
-          <button
-            onClick={onLogout}
-            className="btn-secondary flex-1"
-          >
+          <button onClick={onLogout} className="btn-secondary flex-1">
             Cerrar sesión
           </button>
         </div>
