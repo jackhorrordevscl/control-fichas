@@ -4,6 +4,20 @@ import { ClipboardPlus, Search, X, ChevronDown, ChevronUp, Pencil, AlertCircle }
 import api from '../api/client';
 import { buildLocalISO, formatChileDateTime, formatChileDate } from '../utils/datetime';
 
+interface ConsultationHistory {
+  id: string;
+  editedAt: string;
+  editedBy: { name: string; email: string };
+  snapshot: {
+    sessionDate: string;
+    consultReason: string;
+    intervention: string;
+    agreements?: string;
+    nextSessionDate?: string;
+    sessionType: string;
+  };
+}
+
 interface Consultation {
   id: string;
   patientId: string;
@@ -13,10 +27,8 @@ interface Consultation {
   agreements: string;
   nextSessionDate: string;
   sessionType: string;
-  version: number;
-  isCorrected: boolean;
-  previousVersionId: string | null;
   therapist: { name: string; email: string };
+  history: ConsultationHistory[];
 }
 
 interface Patient {
@@ -156,24 +168,6 @@ export default function ConsultationsPage() {
 
   const selectedPatient = patients.find((p: Patient) => p.id === selectedPatientId);
 
-  // Separar versiones activas de corregidas
-  const activeConsultations = consultations.filter((c: Consultation) => !c.isCorrected);
-  const correctedConsultations = consultations.filter((c: Consultation) => c.isCorrected);
-
-  const getVersionHistory = (c: Consultation): Consultation[] => {
-    const history: Consultation[] = [];
-    let current = c;
-    while (current.previousVersionId) {
-      const prev = correctedConsultations.find(
-        (x: Consultation) => x.id === current.previousVersionId
-      );
-      if (!prev) break;
-      history.push(prev);
-      current = prev;
-    }
-    return history;
-  };
-
   return (
     <div className="p-4 md:p-8">
       <div className="flex items-center justify-between mb-6 md:mb-8">
@@ -273,7 +267,7 @@ export default function ConsultationsPage() {
         </div>
       )}
 
-      {/* Modal edición con versionado */}
+      {/* Modal edición */}
       {editingConsultation && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-auto">
@@ -281,7 +275,7 @@ export default function ConsultationsPage() {
               <div>
                 <h3 className="font-display text-xl text-slate-900">Corregir Sesión</h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Se creará v{editingConsultation.version + 1}. La versión anterior quedará marcada como corregida.
+                  La versión actual quedará guardada en el historial de esta sesión.
                 </p>
               </div>
               <button onClick={() => setEditingConsultation(null)} className="text-slate-400 hover:text-slate-600">
@@ -291,7 +285,7 @@ export default function ConsultationsPage() {
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex gap-2">
               <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700">
-                Por normativa clínica las sesiones no se eliminan ni sobreescriben. Esta corrección genera un nuevo registro versionado manteniendo la trazabilidad del historial.
+                Por normativa clínica las sesiones no se eliminan ni sobreescriben. Esta corrección actualiza el registro y guarda un snapshot de la versión anterior para trazabilidad.
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -398,18 +392,15 @@ export default function ConsultationsPage() {
                 Selecciona un paciente para ver su historial
               </p>
             </div>
-          ) : activeConsultations.length === 0 ? (
+          ) : consultations.length === 0 ? (
             <div className="card flex items-center justify-center h-48">
               <p className="text-slate-400 text-sm">Sin consultas registradas</p>
             </div>
           ) : (
-            activeConsultations.map((c: Consultation) => {
-              const history = getVersionHistory(c);
+            consultations.map((c: Consultation) => {
               const isExpanded = expandedHistory.has(c.id);
-
               return (
                 <div key={c.id}>
-                  {/* Versión activa */}
                   <div className="card">
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -417,14 +408,16 @@ export default function ConsultationsPage() {
                           {formatChileDateTime(c.sessionDate)}
                         </p>
                         <div className="flex flex-wrap gap-2 mt-1">
-                          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                            v{c.version}
-                          </span>
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
                             c.sessionType === 'TELEMED' ? 'bg-blue-50 text-blue-600' : 'bg-sage-50 text-sage-600'
                           }`}>
                             {c.sessionType === 'TELEMED' ? 'Telemedicina' : 'Presencial'}
                           </span>
+                          {c.history.length > 0 && (
+                            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                              {c.history.length} corrección{c.history.length > 1 ? 'es' : ''}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <button onClick={() => handleEditOpen(c)}
@@ -460,49 +453,40 @@ export default function ConsultationsPage() {
                       <p className="text-xs text-slate-400">Terapeuta: {c.therapist?.name}</p>
                     </div>
 
-                    {/* Botón ver historial */}
-                    {history.length > 0 && (
+                    {c.history.length > 0 && (
                       <button
                         onClick={() => toggleHistory(c.id)}
                         className="mt-3 pt-3 border-t border-slate-100 w-full flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
                       >
                         {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                        {isExpanded ? 'Ocultar' : 'Ver'} {history.length} versión{history.length > 1 ? 'es' : ''} anterior{history.length > 1 ? 'es' : ''}
+                        {isExpanded ? 'Ocultar' : 'Ver'} historial de correcciones ({c.history.length})
                       </button>
                     )}
                   </div>
 
-                  {/* Versiones anteriores expandibles */}
-                  {isExpanded && history.map((prev) => (
-                    <div key={prev.id} className="card mt-2 ml-4 opacity-60 border-dashed border-amber-200 bg-amber-50/30">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <p className="text-xs font-medium text-slate-600">
-                            {formatChileDateTime(prev.sessionDate)}
-                          </p>
-                          <div className="flex gap-2 mt-1">
-                            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
-                              v{prev.version}
-                            </span>
-                            <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">
-                              Versión corregida
-                            </span>
-                          </div>
-                        </div>
+                  {isExpanded && c.history.map((h: ConsultationHistory) => (
+                    <div key={h.id} className="card mt-2 ml-4 opacity-60 border-dashed border-amber-200 bg-amber-50/30">
+                      <div className="mb-2">
+                        <p className="text-xs font-medium text-slate-600">
+                          {formatChileDateTime(h.snapshot.sessionDate)}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Corregido el {formatChileDateTime(h.editedAt)} por {h.editedBy.name}
+                        </p>
                       </div>
                       <div className="space-y-2 text-xs text-slate-600">
                         <div>
                           <p className="font-medium text-slate-500 uppercase tracking-wide mb-0.5">Motivo</p>
-                          <p>{prev.consultReason}</p>
+                          <p>{h.snapshot.consultReason}</p>
                         </div>
                         <div>
                           <p className="font-medium text-slate-500 uppercase tracking-wide mb-0.5">Intervención</p>
-                          <p>{prev.intervention}</p>
+                          <p>{h.snapshot.intervention}</p>
                         </div>
-                        {prev.agreements && (
+                        {h.snapshot.agreements && (
                           <div>
                             <p className="font-medium text-slate-500 uppercase tracking-wide mb-0.5">Acuerdos</p>
-                            <p>{prev.agreements}</p>
+                            <p>{h.snapshot.agreements}</p>
                           </div>
                         )}
                       </div>

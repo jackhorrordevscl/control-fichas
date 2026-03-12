@@ -3,7 +3,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateConsultationDto } from './dto/create-consultation.dto';
 import { CorrectConsultationDto } from './dto/correct-consultation.dto';
 
-// Si viene con hora (datetime), úsala directo. Si es solo fecha, parsea como local mediodía.
 function parseDate(dateStr: string): Date {
   if (dateStr.includes('T') || dateStr.includes(' ')) {
     return new Date(dateStr);
@@ -25,7 +24,6 @@ export class ConsultationsService {
       });
       patientRut = patient?.rut ?? '';
     }
-
     return this.prisma.consultation.create({
       data: {
         patientId: dto.patientId,
@@ -36,7 +34,6 @@ export class ConsultationsService {
         agreements: dto.agreements,
         nextSessionDate: dto.nextSessionDate ? parseDate(dto.nextSessionDate) : null,
         sessionType: dto.sessionType ?? 'IN_PERSON',
-        version: 1,
         scheduledAt: dto.scheduledAt ? parseDate(dto.scheduledAt) : parseDate(dto.sessionDate),
         patientRut,
       },
@@ -49,6 +46,12 @@ export class ConsultationsService {
       orderBy: { createdAt: 'desc' },
       include: {
         therapist: { select: { name: true, email: true } },
+        history: {
+          orderBy: { editedAt: 'desc' },
+          include: {
+            editedBy: { select: { name: true, email: true } },
+          },
+        },
       },
     });
   }
@@ -58,6 +61,12 @@ export class ConsultationsService {
       where: { id },
       include: {
         therapist: { select: { name: true, email: true } },
+        history: {
+          orderBy: { editedAt: 'desc' },
+          include: {
+            editedBy: { select: { name: true, email: true } },
+          },
+        },
       },
     });
     if (!consultation) throw new NotFoundException('Consulta no encontrada');
@@ -66,26 +75,48 @@ export class ConsultationsService {
 
   async correct(id: string, dto: CorrectConsultationDto, therapistId: string) {
     const original = await this.findOne(id);
-    await this.prisma.consultation.update({
-      where: { id },
-      data: { isCorrected: true },
-    });
-    return this.prisma.consultation.create({
-      data: {
-        patientId: original.patientId,
-        therapistId,
-        sessionDate: dto.sessionDate ? parseDate(dto.sessionDate) : original.sessionDate,
-        consultReason: dto.consultReason ?? original.consultReason,
-        intervention: dto.intervention ?? original.intervention,
-        agreements: dto.agreements ?? original.agreements,
-        nextSessionDate: dto.nextSessionDate ? parseDate(dto.nextSessionDate) : original.nextSessionDate,
-        sessionType: dto.sessionType ?? original.sessionType,
-        version: original.version + 1,
-        previousVersionId: original.id,
-        isCorrected: false,
-        scheduledAt: original.scheduledAt,
-        patientRut: original.patientRut,
-      },
+
+    // Snapshot del estado actual antes de modificar
+    const snapshot = JSON.parse(JSON.stringify({
+      sessionDate: original.sessionDate,
+      consultReason: original.consultReason,
+      intervention: original.intervention,
+      agreements: original.agreements,
+      nextSessionDate: original.nextSessionDate,
+      sessionType: original.sessionType,
+    }));
+
+    return this.prisma.$transaction(async (tx) => {
+      // Guardar snapshot en historial
+      await tx.consultationHistory.create({
+        data: {
+          consultationId: id,
+          editedById: therapistId,
+          snapshot,
+        },
+      });
+
+      // Actualizar el registro existente (no crear uno nuevo)
+      return tx.consultation.update({
+        where: { id },
+        data: {
+          sessionDate: dto.sessionDate ? parseDate(dto.sessionDate) : original.sessionDate,
+          consultReason: dto.consultReason ?? original.consultReason,
+          intervention: dto.intervention ?? original.intervention,
+          agreements: dto.agreements ?? original.agreements,
+          nextSessionDate: dto.nextSessionDate ? parseDate(dto.nextSessionDate) : original.nextSessionDate,
+          sessionType: dto.sessionType ?? original.sessionType,
+        },
+        include: {
+          therapist: { select: { name: true, email: true } },
+          history: {
+            orderBy: { editedAt: 'desc' },
+            include: {
+              editedBy: { select: { name: true, email: true } },
+            },
+          },
+        },
+      });
     });
   }
 }

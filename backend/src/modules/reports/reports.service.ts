@@ -101,9 +101,7 @@ export class ReportsService {
             .fontSize(11)
             .font('Helvetica-Bold')
             .text(
-              `Sesión ${index + 1}  —  ${new Date(c.sessionDate).toLocaleDateString('es-CL')}  (v${c.version}${c.isCorrected ? ' · CORREGIDA' : ''})`,
-              50, doc.y - 16,
-              { width: 500 }
+              `Sesión ${index + 1}  —  ${new Date(c.sessionDate).toLocaleDateString('es-CL')}`,
             );
 
           doc.fillColor('#000000');

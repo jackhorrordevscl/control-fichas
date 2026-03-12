@@ -15,9 +15,6 @@ export declare class ConsultationsController {
         agreements: string | null;
         nextSessionDate: Date | null;
         sessionType: import("@prisma/client").$Enums.SessionType;
-        version: number;
-        previousVersionId: string | null;
-        isCorrected: boolean;
         scheduledAt: Date;
         reminderSent: boolean;
         patientRut: string;
@@ -27,6 +24,18 @@ export declare class ConsultationsController {
             email: string;
             name: string;
         };
+        history: ({
+            editedBy: {
+                email: string;
+                name: string;
+            };
+        } & {
+            id: string;
+            snapshot: import("@prisma/client/runtime/library").JsonValue;
+            editedAt: Date;
+            consultationId: string;
+            editedById: string;
+        })[];
     } & {
         id: string;
         createdAt: Date;
@@ -38,9 +47,6 @@ export declare class ConsultationsController {
         agreements: string | null;
         nextSessionDate: Date | null;
         sessionType: import("@prisma/client").$Enums.SessionType;
-        version: number;
-        previousVersionId: string | null;
-        isCorrected: boolean;
         scheduledAt: Date;
         reminderSent: boolean;
         patientRut: string;
@@ -50,6 +56,18 @@ export declare class ConsultationsController {
             email: string;
             name: string;
         };
+        history: ({
+            editedBy: {
+                email: string;
+                name: string;
+            };
+        } & {
+            id: string;
+            snapshot: import("@prisma/client/runtime/library").JsonValue;
+            editedAt: Date;
+            consultationId: string;
+            editedById: string;
+        })[];
     } & {
         id: string;
         createdAt: Date;
@@ -61,14 +79,28 @@ export declare class ConsultationsController {
         agreements: string | null;
         nextSessionDate: Date | null;
         sessionType: import("@prisma/client").$Enums.SessionType;
-        version: number;
-        previousVersionId: string | null;
-        isCorrected: boolean;
         scheduledAt: Date;
         reminderSent: boolean;
         patientRut: string;
     }>;
     correct(id: string, dto: CorrectConsultationDto, user: any): Promise<{
+        therapist: {
+            email: string;
+            name: string;
+        };
+        history: ({
+            editedBy: {
+                email: string;
+                name: string;
+            };
+        } & {
+            id: string;
+            snapshot: import("@prisma/client/runtime/library").JsonValue;
+            editedAt: Date;
+            consultationId: string;
+            editedById: string;
+        })[];
+    } & {
         id: string;
         createdAt: Date;
         therapistId: string;
@@ -79,9 +111,6 @@ export declare class ConsultationsController {
         agreements: string | null;
         nextSessionDate: Date | null;
         sessionType: import("@prisma/client").$Enums.SessionType;
-        version: number;
-        previousVersionId: string | null;
-        isCorrected: boolean;
         scheduledAt: Date;
         reminderSent: boolean;
         patientRut: string;

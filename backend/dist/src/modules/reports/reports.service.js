@@ -91,7 +91,7 @@ let ReportsService = class ReportsService {
                         .fillColor('#1e293b')
                         .fontSize(11)
                         .font('Helvetica-Bold')
-                        .text(`Sesión ${index + 1}  —  ${new Date(c.sessionDate).toLocaleDateString('es-CL')}  (v${c.version}${c.isCorrected ? ' · CORREGIDA' : ''})`, 50, doc.y - 16, { width: 500 });
+                        .text(`Sesión ${index + 1}  —  ${new Date(c.sessionDate).toLocaleDateString('es-CL')}`);
                     doc.fillColor('#000000');
                     doc.moveDown(0.8);
                     doc.fontSize(10).font('Helvetica');

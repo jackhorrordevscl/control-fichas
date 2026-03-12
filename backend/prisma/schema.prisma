@@ -31,6 +31,7 @@ model User {
   auditLogs     AuditLog[]
   patientEdits  PatientHistory[] @relation("PatientEdits")
   sharedFiles   SharedFile[] @relation("UploadedFiles")
+  consultationEdits ConsultationHistory[] @relation("ConsultationEdits")
 }
 
 enum Role {
@@ -87,24 +88,23 @@ enum DocumentType {
 }
 
 model Consultation {
-  id                String      @id @default(uuid())
-  patientId         String
-  patient           Patient     @relation(fields: [patientId], references: [id])
-  therapistId       String
-  therapist         User        @relation(fields: [therapistId], references: [id])
-  sessionDate       DateTime
-  consultReason     String
-  intervention      String
-  agreements        String?
-  nextSessionDate   DateTime?
-  sessionType       SessionType @default(IN_PERSON)
-  version           Int         @default(1)
-  previousVersionId String?
-  isCorrected       Boolean     @default(false)
-  createdAt         DateTime    @default(now())
-  scheduledAt       DateTime
-  reminderSent      Boolean     @default(false)
-  patientRut        String
+  id              String      @id @default(uuid())
+  patientId       String
+  patient         Patient     @relation(fields: [patientId], references: [id])
+  therapistId     String
+  therapist       User        @relation(fields: [therapistId], references: [id])
+  sessionDate     DateTime
+  consultReason   String
+  intervention    String
+  agreements      String?
+  nextSessionDate DateTime?
+  sessionType     SessionType @default(IN_PERSON)
+  createdAt       DateTime    @default(now())
+  scheduledAt     DateTime
+  reminderSent    Boolean     @default(false)
+  patientRut      String
+
+  history         ConsultationHistory[]
 }
 
 enum SessionType {
@@ -176,4 +176,14 @@ model PatientHistory {
   reason      String
   snapshot    Json
   diff        Json
+}
+
+model ConsultationHistory {
+  id             String      @id @default(uuid())
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id])
+  editedById     String
+  editedBy       User        @relation("ConsultationEdits", fields: [editedById], references: [id])
+  editedAt       DateTime    @default(now())
+  snapshot       Json
 }

@@ -43,7 +43,6 @@ let ConsultationsService = class ConsultationsService {
                 agreements: dto.agreements,
                 nextSessionDate: dto.nextSessionDate ? parseDate(dto.nextSessionDate) : null,
                 sessionType: dto.sessionType ?? 'IN_PERSON',
-                version: 1,
                 scheduledAt: dto.scheduledAt ? parseDate(dto.scheduledAt) : parseDate(dto.sessionDate),
                 patientRut,
             },
@@ -55,6 +54,12 @@ let ConsultationsService = class ConsultationsService {
             orderBy: { createdAt: 'desc' },
             include: {
                 therapist: { select: { name: true, email: true } },
+                history: {
+                    orderBy: { editedAt: 'desc' },
+                    include: {
+                        editedBy: { select: { name: true, email: true } },
+                    },
+                },
             },
         });
     }
@@ -63,6 +68,12 @@ let ConsultationsService = class ConsultationsService {
             where: { id },
             include: {
                 therapist: { select: { name: true, email: true } },
+                history: {
+                    orderBy: { editedAt: 'desc' },
+                    include: {
+                        editedBy: { select: { name: true, email: true } },
+                    },
+                },
             },
         });
         if (!consultation)
@@ -71,26 +82,42 @@ let ConsultationsService = class ConsultationsService {
     }
     async correct(id, dto, therapistId) {
         const original = await this.findOne(id);
-        await this.prisma.consultation.update({
-            where: { id },
-            data: { isCorrected: true },
-        });
-        return this.prisma.consultation.create({
-            data: {
-                patientId: original.patientId,
-                therapistId,
-                sessionDate: dto.sessionDate ? parseDate(dto.sessionDate) : original.sessionDate,
-                consultReason: dto.consultReason ?? original.consultReason,
-                intervention: dto.intervention ?? original.intervention,
-                agreements: dto.agreements ?? original.agreements,
-                nextSessionDate: dto.nextSessionDate ? parseDate(dto.nextSessionDate) : original.nextSessionDate,
-                sessionType: dto.sessionType ?? original.sessionType,
-                version: original.version + 1,
-                previousVersionId: original.id,
-                isCorrected: false,
-                scheduledAt: original.scheduledAt,
-                patientRut: original.patientRut,
-            },
+        const snapshot = JSON.parse(JSON.stringify({
+            sessionDate: original.sessionDate,
+            consultReason: original.consultReason,
+            intervention: original.intervention,
+            agreements: original.agreements,
+            nextSessionDate: original.nextSessionDate,
+            sessionType: original.sessionType,
+        }));
+        return this.prisma.$transaction(async (tx) => {
+            await tx.consultationHistory.create({
+                data: {
+                    consultationId: id,
+                    editedById: therapistId,
+                    snapshot,
+                },
+            });
+            return tx.consultation.update({
+                where: { id },
+                data: {
+                    sessionDate: dto.sessionDate ? parseDate(dto.sessionDate) : original.sessionDate,
+                    consultReason: dto.consultReason ?? original.consultReason,
+                    intervention: dto.intervention ?? original.intervention,
+                    agreements: dto.agreements ?? original.agreements,
+                    nextSessionDate: dto.nextSessionDate ? parseDate(dto.nextSessionDate) : original.nextSessionDate,
+                    sessionType: dto.sessionType ?? original.sessionType,
+                },
+                include: {
+                    therapist: { select: { name: true, email: true } },
+                    history: {
+                        orderBy: { editedAt: 'desc' },
+                        include: {
+                            editedBy: { select: { name: true, email: true } },
+                        },
+                    },
+                },
+            });
         });
     }
 };

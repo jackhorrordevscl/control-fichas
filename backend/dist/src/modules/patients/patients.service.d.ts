@@ -60,9 +60,6 @@ export declare class PatientsService {
             agreements: string | null;
             nextSessionDate: Date | null;
             sessionType: import("@prisma/client").$Enums.SessionType;
-            version: number;
-            previousVersionId: string | null;
-            isCorrected: boolean;
             scheduledAt: Date;
             reminderSent: boolean;
             patientRut: string;
