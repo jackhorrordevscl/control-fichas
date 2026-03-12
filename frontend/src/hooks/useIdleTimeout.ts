@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 
-const IDLE_TIMEOUT = 10 * 1000;
+const IDLE_TIMEOUT = 8 * 60 * 1000;
 
 interface UseIdleTimeoutOptions {
   onWarn: () => void;
