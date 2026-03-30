@@ -29,6 +29,17 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
 
   const port = process.env.PORT || 3001;
+  if (process.env.RUN_MIGRATIONS === 'true') {
+    const { exec } = require('child_process');
+    console.log('🔄 Ejecutando migraciones Prisma...');
+    exec('npx prisma migrate deploy', { cwd: __dirname + '/..' }, (error, stdout, stderr) => {
+      if (error) {
+        console.log('❌ Error en migraciones:', error);
+      } else {
+        console.log('Migraciones completadas:', stdout);
+      }
+    })
+  }
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Servidor corriendo en puerto: ${port}`);
 }
