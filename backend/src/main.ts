@@ -29,19 +29,20 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
 
   const port = process.env.PORT || 3001;
+  // Temporal: ejecutar migraciones al inicio
   if (process.env.RUN_MIGRATIONS === 'true') {
     const { execSync } = require('child_process');
     try {
       console.log('🔄 Ejecutando migraciones Prisma...');
       const result = execSync('npx prisma migrate deploy', {
         cwd: __dirname + '/..',
-        encoding: 'utf-8'
+        encoding: 'utf-8',
       });
       console.log('✅ Migraciones completadas:', result);
-      } catch (error) {
-        console.error('❌ Error en migraciones:', error.message);
-      }
+    } catch (error) {
+      console.error('❌ Error en migraciones:', error.message);
     }
+  }
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Servidor corriendo en puerto: ${port}`);
 }
