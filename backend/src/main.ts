@@ -30,16 +30,18 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   if (process.env.RUN_MIGRATIONS === 'true') {
-    const { exec } = require('child_process');
-    console.log('🔄 Ejecutando migraciones Prisma...');
-    exec('npx prisma migrate deploy', { cwd: __dirname + '/..' }, (error, stdout, stderr) => {
-      if (error) {
-        console.log('❌ Error en migraciones:', error);
-      } else {
-        console.log('Migraciones completadas:', stdout);
+    const { execSync } = require('child_process');
+    try {
+      console.log('🔄 Ejecutando migraciones Prisma...');
+      const result = execSync('npx prisma migrate deploy', {
+        cwd: __dirname + '/..',
+        encoding: 'utf-8'
+      });
+      console.log('✅ Migraciones completadas:', result);
+      } catch (error) {
+        console.error('❌ Error en migraciones:', error.message);
       }
-    })
-  }
+    }
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Servidor corriendo en puerto: ${port}`);
 }
