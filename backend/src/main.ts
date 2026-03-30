@@ -30,6 +30,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   // Temporal: ejecutar migraciones al inicio
+  console.log('🔍 RUN_MIGRATIONS env var:', process.env.RUN_MIGRATIONS);
   if (process.env.RUN_MIGRATIONS === 'true') {
     const { execSync } = require('child_process');
     try {
@@ -42,6 +43,8 @@ async function bootstrap() {
     } catch (error) {
       console.error('❌ Error en migraciones:', error.message);
     }
+  } else {
+    console.log('⚠️ RUN_MIGRATIONS no es "true", saltando migraciones');
   }
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Servidor corriendo en puerto: ${port}`);
