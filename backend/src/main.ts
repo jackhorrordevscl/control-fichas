@@ -33,10 +33,17 @@ async function bootstrap() {
   console.log('🔍 RUN_MIGRATIONS env var:', process.env.RUN_MIGRATIONS);
   if (process.env.RUN_MIGRATIONS === 'true') {
     const { execSync } = require('child_process');
+    const path = require('path');
     try {
       console.log('🔄 Ejecutando migraciones Prisma...');
+      // Detectar si estamos en dist/src o directamente en src
+      const backendRoot = __dirname.includes('/dist/')
+        ? path.join(__dirname, '..', '..')
+        : path.join(__dirname, '..');
+
+      console.log('📂 Backend root:', backendRoot);
       const result = execSync('npx prisma migrate deploy', {
-        cwd: __dirname + '/..',
+        cwd: backendRoot,
         encoding: 'utf-8',
       });
       console.log('✅ Migraciones completadas:', result);
