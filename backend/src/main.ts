@@ -29,32 +29,31 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
 
   const port = process.env.PORT || 3001;
-  // Temporal: ejecutar migraciones al inicio
-  console.log('🔍 RUN_MIGRATIONS env var:', process.env.RUN_MIGRATIONS);
-  if (process.env.RUN_MIGRATIONS === 'true') {
-    const { execSync } = require('child_process');
-    const path = require('path');
-    try {
-      console.log('🔄 Ejecutando migraciones Prisma...');
-      // Detectar si estamos en dist/src o directamente en src
-      const backendRoot = __dirname.includes('/dist/')
-        ? path.join(__dirname, '..', '..')
-        : path.join(__dirname, '..');
-
-      console.log('📂 Backend root:', backendRoot);
-      const result = execSync('npx prisma migrate deploy', {
-        cwd: backendRoot,
-        encoding: 'utf-8',
-      });
-      console.log('✅ Migraciones completadas:', result);
-    } catch (error) {
-      console.error('❌ Error en migraciones:', error.message);
-    }
-  } else {
-    console.log('⚠️ RUN_MIGRATIONS no es "true", saltando migraciones');
-  }
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Servidor corriendo en puerto: ${port}`);
+  // Temporal: ejecutar migraciones DESPUÉS de que el servidor esté live
+  console.log('🔍 RUN_MIGRATIONS env var:', process.env.RUN_MIGRATIONS);
+  if (process.env.RUN_MIGRATIONS === 'true') {
+    const { exec } = require('child_process');
+    const path = require('path');
+    console.log('🔄 Ejecutando migraciones Prisma (async)...');
+    const backendRoot = __dirname.includes('/dist/')
+      ? path.join(__dirname, '..', '..')
+      : path.join(__dirname, '..');
+
+    exec(
+      'npx prisma migrate deploy',
+      { cwd: backendRoot },
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error('❌ Error en migraciones:', error.message);
+          console.error('stderr:', stderr);
+        } else {
+          console.log('✅ Migraciones completadas:', stdout);
+        }
+      },
+    );
+  }
 }
 
 bootstrap();
