@@ -228,7 +228,7 @@ export default function ConsultationsPage() {
                 onChange={e => setForm({ ...form, consultReason: e.target.value })} />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Intervención realizada *</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Intervención realizada / Registro de evolución clínica *</label>
               <textarea rows={3} className="input-field resize-none text-slate-800 placeholder-slate-400"
                 placeholder="Describe las técnicas e intervenciones realizadas durante la sesión..."
                 value={form.intervention}
