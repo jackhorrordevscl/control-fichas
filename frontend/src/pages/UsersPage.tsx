@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, Trash2, Shield, User, X, Crown, Users, Check, Pencil, Eye, EyeOff } from 'lucide-react';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 interface UserItem {
   id: string;
@@ -43,8 +44,8 @@ const CAN_EDIT_ROLES = ['ADMIN', 'DIRECTOR', 'COORDINATOR'];
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
-  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const canEditRoles = CAN_EDIT_ROLES.includes(currentUser?.role);
+  const { user: currentUser } = useAuth();
+  const canEditRoles = CAN_EDIT_ROLES.includes(currentUser?.role ?? '');
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ email: '', name: '', password: '', role: 'THERAPIST' });

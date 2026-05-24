@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ClipboardPlus, Search, X, ChevronDown, ChevronUp, Pencil, AlertCircle } from 'lucide-react';
+import { ClipboardPlus, Search, X, ChevronDown, ChevronUp, Pencil, AlertCircle, Paperclip, Download } from 'lucide-react';
 import api from '../api/client';
 import { buildLocalISO, formatChileDateTime, formatChileDate } from '../utils/datetime';
 
 interface ConsultationHistory {
   id: string;
   editedAt: string;
+  reason: string;
   editedBy: { name: string; email: string };
   snapshot: {
     sessionDate: string;
@@ -29,6 +30,11 @@ interface Consultation {
   sessionType: string;
   therapist: { name: string; email: string };
   history: ConsultationHistory[];
+  documents: Array<{
+    id: string;
+    fileName: string;
+    uploadedAt: string;
+  }>;
 }
 
 interface Patient {
@@ -51,6 +57,7 @@ export default function ConsultationsPage() {
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [showPatientList, setShowPatientList] = useState(true);
   const [form, setForm] = useState(emptyForm);
+  const [consultationAttachment, setConsultationAttachment] = useState<File | null>(null);
   const [formError, setFormError] = useState('');
   const [editingConsultation, setEditingConsultation] = useState<Consultation | null>(null);
   const [editForm, setEditForm] = useState({
@@ -59,6 +66,8 @@ export default function ConsultationsPage() {
     nextSessionDate: '', nextSessionTime: '09:00',
     sessionType: 'IN_PERSON',
   });
+  const [editReason, setEditReason] = useState('');
+  const [editError, setEditError] = useState('');
   const [expandedHistory, setExpandedHistory] = useState<Set<string>>(new Set());
 
   const { data: patients = [] } = useQuery({
@@ -75,11 +84,14 @@ export default function ConsultationsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => api.post('/consultations', data),
+    mutationFn: (data: FormData) => api.post('/consultations', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['consultations'] });
       setShowForm(false);
       setForm(emptyForm);
+      setConsultationAttachment(null);
       setFormError('');
     },
     onError: (err: any) => {
@@ -93,9 +105,11 @@ export default function ConsultationsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['consultations'] });
       setEditingConsultation(null);
+      setEditReason('');
+      setEditError('');
     },
     onError: (err: any) => {
-      alert(err.response?.data?.message ?? 'Error al corregir sesión');
+      setEditError(err.response?.data?.message ?? 'Error al corregir sesión');
     },
   });
 
@@ -104,18 +118,41 @@ export default function ConsultationsPage() {
     if (!form.sessionDate) { setFormError('La fecha de sesión es obligatoria'); return; }
     if (!form.consultReason.trim()) { setFormError('El motivo de consulta es obligatorio'); return; }
     if (!form.intervention.trim()) { setFormError('La intervención es obligatoria'); return; }
+    if (consultationAttachment && consultationAttachment.type !== 'application/pdf') {
+      setFormError('El adjunto de la consulta debe ser un archivo PDF');
+      return;
+    }
     setFormError('');
-    createMutation.mutate({
-      patientId: form.patientId,
-      sessionDate: buildLocalISO(form.sessionDate, form.sessionTime),
-      consultReason: form.consultReason,
-      intervention: form.intervention,
-      agreements: form.agreements,
-      nextSessionDate: form.nextSessionDate
-        ? buildLocalISO(form.nextSessionDate, form.nextSessionTime)
-        : undefined,
-      sessionType: form.sessionType,
+
+    const payload = new FormData();
+    payload.append('patientId', form.patientId);
+    payload.append('sessionDate', buildLocalISO(form.sessionDate, form.sessionTime));
+    payload.append('consultReason', form.consultReason);
+    payload.append('intervention', form.intervention);
+    payload.append('agreements', form.agreements);
+    payload.append('sessionType', form.sessionType);
+
+    if (form.nextSessionDate) {
+      payload.append('nextSessionDate', buildLocalISO(form.nextSessionDate, form.nextSessionTime));
+    }
+
+    if (consultationAttachment) {
+      payload.append('attachment', consultationAttachment);
+    }
+
+    createMutation.mutate(payload);
+  };
+
+  const handleDownloadDoc = async (docId: string, fileName: string) => {
+    const res = await api.get(`/documents/${docId}/download`, {
+      responseType: 'blob',
     });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const handleEditOpen = (c: Consultation) => {
@@ -133,14 +170,23 @@ export default function ConsultationsPage() {
       nextSessionTime: nd ? toLocalTime(nd) : '09:00',
       sessionType: c.sessionType,
     });
+    setEditReason('');
+    setEditError('');
     setEditingConsultation(c);
   };
 
   const handleEditSubmit = () => {
     if (!editingConsultation) return;
+    if (!editReason.trim()) {
+      setEditError('Debes indicar el motivo de la corrección');
+      return;
+    }
+
+    setEditError('');
     correctMutation.mutate({
       id: editingConsultation.id,
       data: {
+        reason: editReason.trim(),
         sessionDate: buildLocalISO(editForm.sessionDate, editForm.sessionTime),
         consultReason: editForm.consultReason,
         intervention: editForm.intervention,
@@ -187,7 +233,11 @@ export default function ConsultationsPage() {
         <div className="card mb-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-display text-xl text-slate-900">Registrar Sesión</h3>
-            <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">
+            <button onClick={() => {
+              setShowForm(false);
+              setConsultationAttachment(null);
+              setFormError('');
+            }} className="text-slate-400 hover:text-slate-600">
               <X size={20} />
             </button>
           </div>
@@ -241,6 +291,18 @@ export default function ConsultationsPage() {
                 value={form.agreements}
                 onChange={e => setForm({ ...form, agreements: e.target.value })} />
             </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Adjuntar PDF de la consulta</label>
+              <input
+                type="file"
+                accept="application/pdf"
+                className="input-field file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+                onChange={e => setConsultationAttachment(e.target.files?.[0] ?? null)}
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Opcional. El archivo quedará asociado sólo a esta sesión y paciente.
+              </p>
+            </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Próxima sesión — Fecha</label>
               <input type="date" className="input-field" value={form.nextSessionDate}
@@ -262,7 +324,11 @@ export default function ConsultationsPage() {
             <button onClick={handleSubmit} className="btn-primary" disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Guardando...' : 'Guardar sesión'}
             </button>
-            <button onClick={() => setShowForm(false)} className="btn-secondary">Cancelar</button>
+            <button onClick={() => {
+              setShowForm(false);
+              setConsultationAttachment(null);
+              setFormError('');
+            }} className="btn-secondary">Cancelar</button>
           </div>
         </div>
       )}
@@ -285,8 +351,18 @@ export default function ConsultationsPage() {
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex gap-2">
               <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700">
-                Por normativa clínica las sesiones no se eliminan ni sobreescriben. Esta corrección actualiza el registro y guarda un snapshot de la versión anterior para trazabilidad.
+                Por normativa clínica las sesiones no se eliminan ni sobreescriben. Esta corrección crea una nueva versión vigente y conserva la versión anterior en el historial.
               </p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Motivo de la corrección *</label>
+              <textarea
+                rows={2}
+                className="input-field resize-none text-slate-800 placeholder-slate-400"
+                placeholder="Ej: se corrige registro incompleto de intervención clínica"
+                value={editReason}
+                onChange={e => setEditReason(e.target.value)}
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -336,11 +412,21 @@ export default function ConsultationsPage() {
                   onChange={e => setEditForm({ ...editForm, nextSessionTime: e.target.value })} />
               </div>
             </div>
+            {editError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4 flex items-center gap-2">
+                <AlertCircle size={14} className="text-red-500 shrink-0" />
+                <p className="text-red-600 text-sm">{editError}</p>
+              </div>
+            )}
             <div className="flex gap-3 mt-6">
               <button onClick={handleEditSubmit} className="btn-primary" disabled={correctMutation.isPending}>
                 {correctMutation.isPending ? 'Guardando...' : 'Guardar corrección'}
               </button>
-              <button onClick={() => setEditingConsultation(null)} className="btn-secondary">Cancelar</button>
+              <button onClick={() => {
+                setEditingConsultation(null);
+                setEditReason('');
+                setEditError('');
+              }} className="btn-secondary">Cancelar</button>
             </div>
           </div>
         </div>
@@ -450,6 +536,33 @@ export default function ConsultationsPage() {
                           </p>
                         </div>
                       )}
+                      {c.documents.length > 0 && (
+                        <div className="pt-2 border-t border-slate-100">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Paperclip size={14} className="text-slate-500" />
+                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                              Adjuntos de la consulta
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            {c.documents.map((doc) => (
+                              <button
+                                key={doc.id}
+                                onClick={() => handleDownloadDoc(doc.id, doc.fileName)}
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left hover:bg-slate-100 transition-colors"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-slate-700">{doc.fileName}</p>
+                                    <p className="text-xs text-slate-400">Subido el {formatChileDate(doc.uploadedAt)}</p>
+                                  </div>
+                                  <Download size={14} className="shrink-0 text-slate-500" />
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <p className="text-xs text-slate-400">Terapeuta: {c.therapist?.name}</p>
                     </div>
 
@@ -475,6 +588,10 @@ export default function ConsultationsPage() {
                         </p>
                       </div>
                       <div className="space-y-2 text-xs text-slate-600">
+                        <div>
+                          <p className="font-medium text-slate-500 uppercase tracking-wide mb-0.5">Motivo de corrección</p>
+                          <p>{h.reason}</p>
+                        </div>
                         <div>
                           <p className="font-medium text-slate-500 uppercase tracking-wide mb-0.5">Motivo</p>
                           <p>{h.snapshot.consultReason}</p>

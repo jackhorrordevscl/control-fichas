@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -7,7 +7,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { formatRut, normalizeRut } from '../utils/rut';
 import api from '../api/client';
-import { Calendar, Search, ArrowLeft, UserCircle, User } from 'lucide-react';
+import { Calendar, Search, ArrowLeft } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -17,10 +17,6 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 
 interface SessionResult {
-  found: boolean;
-  patientName?: string;
-  therapistName?: string;
-  nextSession?: string | null;
   message: string;
 }
 
@@ -38,18 +34,6 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
   }
 
   return fallback;
-}
-
-
-function formatFecha(isoDate: string): string {
-  return new Date(isoDate).toLocaleString('es-CL', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 function PublicSessionQuery() {
@@ -145,42 +129,18 @@ function PublicSessionQuery() {
       </div>
 
       {result && (
-        <div className={`mt-5 rounded-xl p-4 ${
-          result.found && result.nextSession
-            ? 'bg-green-50 border border-green-100'
-            : result.found
-            ? 'bg-amber-50 border border-amber-100'
-            : 'bg-red-50 border border-red-100'
-        }`}>
-          {result.found ? (
-            <>
-              <div className="flex items-center gap-2 mb-3">
-                <UserCircle className="w-5 h-5 text-slate-500" />
-                <span className="font-medium text-slate-700">{result.patientName}</span>
-              </div>
-              <div className="flex items-center gap-2 mb-3">
-                <User className="w-4 h-4 text-slate-400" />
-                <span className="text-sm text-slate-600">
-                  Terapeuta: <strong>{result.therapistName}</strong>
-                </span>
-              </div>
-              {result.nextSession ? (
-                <div className="flex items-start gap-2">
-                  <Calendar className="w-4 h-4 text-indigo-500 mt-0.5" />
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-0.5">Próxima sesión</p>
-                    <p className="text-sm font-semibold text-indigo-700 capitalize">
-                      {formatFecha(result.nextSession)}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-amber-700">{result.message}</p>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-red-700 text-center">{result.message}</p>
-          )}
+        <div className="mt-5 rounded-xl p-4 bg-slate-50 border border-slate-200">
+          <div className="flex items-start gap-2">
+            <Calendar className="w-4 h-4 text-indigo-500 mt-0.5" />
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wide mb-0.5">
+                Información de agenda
+              </p>
+              <p className="text-sm font-medium text-slate-700">
+                {result.message}
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -188,7 +148,7 @@ function PublicSessionQuery() {
 }
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -200,6 +160,12 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, isLoading, navigate]);
+
   const onSubmit = async (data: LoginForm) => {
     setLoading(true);
     setError('');
@@ -208,8 +174,8 @@ export default function LoginPage() {
       if (res.data.requiresMfa) {
         setMfaRequired(true);
         setUserId(res.data.userId);
-      } else if (res.data.accessToken) {
-        login(res.data.accessToken, res.data.user);
+      } else if (res.data.user) {
+        login(res.data.user);
         navigate('/dashboard');
       }
     } catch (error) {
@@ -229,7 +195,7 @@ export default function LoginPage() {
     setError('');
     try {
       const res = await api.post('/auth/mfa/verify', { userId, token: mfaToken });
-      login(res.data.accessToken, res.data.user);
+      login(res.data.user);
       navigate('/dashboard');
     } catch (error) {
       setError(getApiErrorMessage(error, 'Código MFA inválido. Intenta de nuevo.'));

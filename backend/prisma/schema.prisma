@@ -11,7 +11,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -62,17 +61,19 @@ model Patient {
   telemedConsentSigned  Boolean   @default(false)
   notificationsConsent  Boolean   @default(false)
 
-  therapistId    String
-  therapist      User               @relation(fields: [therapistId], references: [id])
-  consultations  Consultation[]
-  documents      PatientDocument[]
-  history        PatientHistory[]
+  therapistId           String
+  therapist             User               @relation(fields: [therapistId], references: [id])
+  consultations         Consultation[]
+  documents             PatientDocument[]
+  history               PatientHistory[]
 }
 
 model PatientDocument {
   id          String       @id @default(uuid())
   patientId   String
   patient     Patient      @relation(fields: [patientId], references: [id])
+  consultationId String?
+  consultation Consultation? @relation(fields: [consultationId], references: [id])
   type        DocumentType
   fileName    String
   storagePath String
@@ -84,6 +85,7 @@ enum DocumentType {
   INFORMED_CONSENT
   TELEMED_AGREEMENT
   PATIENT_REPORT
+  CONSULTATION_ATTACHMENT
   OTHER
 }
 
@@ -103,8 +105,13 @@ model Consultation {
   scheduledAt     DateTime
   reminderSent    Boolean     @default(false)
   patientRut      String
+  isCurrent       Boolean     @default(true)
+  previousVersionId String?   @unique
+  previousVersion Consultation? @relation("ConsultationVersionChain", fields: [previousVersionId], references: [id])
+  nextVersion     Consultation? @relation("ConsultationVersionChain")
 
   history         ConsultationHistory[]
+  documents       PatientDocument[]
 }
 
 enum SessionType {
@@ -113,20 +120,23 @@ enum SessionType {
 }
 
 model AuditLog {
-  id         String      @id @default(uuid())
-  userId     String
-  user       User        @relation(fields: [userId], references: [id])
-  action     AuditAction
-  resource   String
-  resourceId String
-  detail     String?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime    @default(now())
+  id            String      @id @default(uuid())
+  userId        String?
+  user          User?       @relation(fields: [userId], references: [id])
+  action        AuditAction
+  resource      String
+  resourceId    String
+  detail        String?
+  ipAddress     String?
+  userAgent     String?
+  correlationId String?
+  statusCode    Int?
+  createdAt     DateTime    @default(now())
 }
 
 enum AuditAction {
   LOGIN
+  LOGIN_FAILED
   LOGOUT
   VIEW
   CREATE
@@ -185,5 +195,6 @@ model ConsultationHistory {
   editedById     String
   editedBy       User        @relation("ConsultationEdits", fields: [editedById], references: [id])
   editedAt       DateTime    @default(now())
+  reason         String
   snapshot       Json
 }

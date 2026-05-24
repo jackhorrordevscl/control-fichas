@@ -1,20 +1,37 @@
 #!/bin/bash
 
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$ROOT_DIR/backend/.env"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "❌ No se encontró $ENV_FILE"
+  exit 1
+fi
+
+if [[ -z "$DATABASE_URL" ]]; then
+  DATABASE_URL=$(grep '^DATABASE_URL=' "$ENV_FILE" | head -n 1 | cut -d '=' -f 2-)
+  DATABASE_URL="${DATABASE_URL%\"}"
+  DATABASE_URL="${DATABASE_URL#\"}"
+fi
+
+if [[ -z "$DATABASE_URL" ]]; then
+  echo "❌ DATABASE_URL no está configurado en $ENV_FILE"
+  exit 1
+fi
+
 # ─── CONFIGURACIÓN ───────────────────────────────────────
-DB_USER="umbral_user"
-DB_NAME="umbral_db"
-BACKUP_DIR="$HOME/Escritorio/control-fichas/backups/files"
-BACKUP_SSD="/mnt/backup-ssd/umbral-backups"
+BACKUP_DIR="${BACKUP_DIR:-$ROOT_DIR/backups/files}"
+BACKUP_SSD="${BACKUP_SSD:-/mnt/backup-ssd/umbral-backups}"
 DATE=$(date +"%Y-%m-%d_%H-%M-%S")
 BACKUP_FILE="$BACKUP_DIR/umbral_backup_$DATE.sql.gz"
-RETENTION_DAYS=30
+RETENTION_DAYS="${RETENTION_DAYS:-30}"
 
 # ─── CREAR DIRECTORIOS SI NO EXISTEN ─────────────────────
 mkdir -p "$BACKUP_DIR"
 
 # ─── GENERAR BACKUP ──────────────────────────────────────
 echo "📦 Iniciando backup: $DATE"
-PGPASSWORD="umbral_password_2024" pg_dump -U "$DB_USER" -h localhost "$DB_NAME" | gzip > "$BACKUP_FILE"
+pg_dump "$DATABASE_URL" | gzip > "$BACKUP_FILE"
 
 if [ $? -eq 0 ]; then
   echo "✅ Backup generado: $BACKUP_FILE"

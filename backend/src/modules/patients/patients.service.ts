@@ -1,10 +1,26 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 
 function normalizeRut(rut: string): string {
   return rut.replace(/\./g, '').trim().toUpperCase();
+}
+
+function formatRutForSearch(rut: string): string {
+  const normalized = normalizeRut(rut).replace(/-/g, '');
+
+  if (normalized.length <= 1) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, -1)}-${normalized.slice(-1)}`;
 }
 
 function isDate(val: unknown): val is Date {
@@ -15,34 +31,80 @@ function isDate(val: unknown): val is Date {
 export class PatientsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreatePatientDto, therapistId: string) {
-    return this.prisma.patient.create({
-      data: {
-        ...dto,
-        rut: normalizeRut(dto.rut),
-        birthDate: new Date(dto.birthDate),
-        therapistId,
-      },
-    });
+  private buildWhere(
+    userId: string,
+    userRole: string,
+    query?: string,
+  ): Prisma.PatientWhereInput {
+    const where: Prisma.PatientWhereInput = {
+      deletedAt: null,
+    };
+
+    if (
+      userRole !== Role.DIRECTOR &&
+      userRole !== Role.ADMIN &&
+      userRole !== Role.COORDINATOR
+    ) {
+      where.therapistId = userId;
+    }
+
+    const trimmedQuery = query?.trim();
+    if (!trimmedQuery) {
+      return where;
+    }
+
+    const normalizedRut = normalizeRut(trimmedQuery);
+    const formattedRut = formatRutForSearch(trimmedQuery);
+
+    return {
+      ...where,
+      OR: [
+        { fullName: { contains: trimmedQuery, mode: 'insensitive' } },
+        { rut: { contains: normalizedRut } },
+        { rut: { contains: formattedRut } },
+      ],
+    };
   }
 
-  async findAll(userId: string, userRole: string) {
-    if (userRole === 'DIRECTOR' || userRole === 'ADMIN') {
+  async create(dto: CreatePatientDto, therapistId: string) {
+    try {
+      return await this.prisma.patient.create({
+        data: {
+          ...dto,
+          rut: normalizeRut(dto.rut),
+          birthDate: new Date(dto.birthDate),
+          therapistId,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Ya existe un paciente registrado con ese RUT');
+      }
+
+      throw error;
+    }
+  }
+
+  async findAll(userId: string, userRole: string, query?: string) {
+    const where = this.buildWhere(userId, userRole, query);
+
+    if (
+      userRole === Role.DIRECTOR ||
+      userRole === Role.ADMIN ||
+      userRole === Role.COORDINATOR
+    ) {
       return this.prisma.patient.findMany({
-        where: { deletedAt: null },
+        where,
         include: { therapist: { select: { id: true, name: true } } },
         orderBy: { createdAt: 'desc' },
       });
     }
-    if (userRole === 'COORDINATOR') {
-      return this.prisma.patient.findMany({
-        where: { deletedAt: null },
-        include: { therapist: { select: { id: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
-      });
-    }
+
     return this.prisma.patient.findMany({
-      where: { therapistId: userId, deletedAt: null },
+      where,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -153,7 +215,7 @@ export class PatientsService {
     const rutNorm = normalizeRut(rut);
     const rutSinGuion = rutNorm.replace(/-/g, '');
 
-    const patient = await this.prisma.patient.findFirst({
+    await this.prisma.patient.findFirst({
       where: {
         deletedAt: null,
         OR: [
@@ -172,28 +234,8 @@ export class PatientsService {
       },
     });
 
-    if (!patient) {
-      return { found: false, message: 'No se encontró ningún paciente con ese RUT' };
-    }
-
-    const proximaSesion = patient.consultations[0];
-
-    if (!proximaSesion?.nextSessionDate) {
-      return {
-        found: true,
-        patientName: patient.fullName,
-        therapistName: patient.therapist?.name ?? 'No asignado',
-        nextSession: null,
-        message: 'No tienes sesiones programadas próximamente',
-      };
-    }
-
     return {
-      found: true,
-      patientName: patient.fullName,
-      therapistName: patient.therapist?.name ?? 'No asignado',
-      nextSession: proximaSesion.nextSessionDate,
-      message: 'Sesión encontrada',
+      message: 'Para confirmar tu agenda, comunícate con tu terapeuta por los canales habituales.',
     };
   }
 }

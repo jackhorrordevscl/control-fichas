@@ -1,3 +1,38 @@
+# Frontend Umbral SpA
+
+Aplicación React para operación clínica, autenticación y gestión documental.
+
+## Stack real
+
+- React 19.2
+- React Router DOM 7.13
+- Vite 7.3
+- TypeScript 5.9
+- TanStack Query 5
+- Axios
+- Tailwind CSS 3
+- React Hook Form + Zod
+
+## Comandos
+
+```bash
+npm install
+npm run dev
+npm run build
+npm run preview
+```
+
+## API
+
+El frontend consume la API backend bajo `/api/v1`.
+
+En desarrollo local, la URL base se configura en [frontend/src/api/client.ts](frontend/src/api/client.ts).
+
+## Notas funcionales
+
+- La búsqueda de pacientes usa el backend con query `q`, no filtrado completo en memoria.
+- La pantalla de login consume la respuesta pública neutralizada de próxima sesión.
+- Las páginas clínicas asumen controles de acceso y consentimientos reforzados en backend.
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

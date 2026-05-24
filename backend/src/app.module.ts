@@ -1,4 +1,9 @@
-import { Module } from '@nestjs/common';
+import { 
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+ } from '@nestjs/common';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
@@ -34,4 +39,10 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CorrelationIdMiddleware)
+      .forRoutes('*path');
+  }
+}

@@ -1,39 +1,34 @@
 # Umbral SpA — Sistema de Gestión Clínica
 
-Sistema de gestión de fichas clínicas para consulta psicológica, desarrollado para cumplir con la **Ley 20.584** (Derechos y Deberes de los Pacientes) y la **Ley 19.628** (Protección de la Vida Privada) de Chile.
-
----
+Sistema de gestión de fichas clínicas para consulta psicológica, orientado a control de acceso, trazabilidad clínica y resguardo operativo.
 
 ## Stack Tecnológico
 
 **Frontend**
-- React 18 + TypeScript
+- React 19.2 + TypeScript 5.9
+- Vite 7.3
+- React Router 7.13
+- TanStack Query 5
 - Tailwind CSS
-- React Router v6
-- TanStack Query (React Query)
 - React Hook Form + Zod
 - Axios
 - Lucide React
 
 **Backend**
-- NestJS + TypeScript
+- NestJS 11 + TypeScript
 - PostgreSQL
-- Prisma ORM v6
+- Prisma 7.8 + `@prisma/adapter-pg`
 - JWT + Passport
-- Argon2 (hash de contraseñas)
-- Speakeasy (MFA/TOTP)
-- PDFKit (generación de reportes)
-- Helmet.js (seguridad HTTP)
-
----
+- Argon2
+- Speakeasy + QRCode para MFA
+- PDFKit
+- Helmet
 
 ## Requisitos Previos
 
-- Node.js v20+
-- PostgreSQL 15+
+- Node.js 20+
 - npm
-
----
+- PostgreSQL 15+
 
 ## Instalación
 
@@ -44,7 +39,7 @@ git clone https://github.com/tu-usuario/control-fichas.git
 cd control-fichas
 ```
 
-### 2. Configurar la base de datos
+### 2. Configurar PostgreSQL
 
 ```bash
 sudo -u postgres psql
@@ -58,21 +53,14 @@ ALTER USER umbral_user CREATEDB;
 \q
 ```
 
-### 3. Configurar el Backend
+### 3. Configurar el backend
 
 ```bash
 cd backend
 npm install --legacy-peer-deps
 ```
 
-Crea el archivo `.env` basándote en `.env.example`:
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-Contenido del `.env`:
+Crear `.env` con valores seguros del entorno:
 
 ```env
 DATABASE_URL="postgresql://umbral_user:tu_password_seguro@localhost:5432/umbral_db"
@@ -80,211 +68,94 @@ JWT_SECRET="cambia-este-secreto-en-produccion"
 JWT_EXPIRES_IN="8h"
 MFA_APP_NAME="Umbral SpA"
 FRONTEND_URL="http://localhost:5173"
+ADMIN_EMAIL="admin@umbral.cl"
+ADMIN_PASSWORD="cambia-esta-clave"
+ADMIN_NAME="Administrador Umbral"
 ```
 
-Ejecutar migraciones y seed inicial:
+Aplicar migraciones y seed inicial:
 
 ```bash
-npx prisma migrate dev --name init
+npx prisma migrate deploy
 npm run seed
 ```
 
-### 4. Configurar el Frontend
+### 4. Configurar el frontend
 
 ```bash
 cd ../frontend
 npm install --legacy-peer-deps
 ```
 
-Si vas a usar en red local, edita `src/api/client.ts` y cambia la `baseURL` con la IP de tu servidor:
-
-```typescript
-baseURL: 'http://TU_IP:3001/api/v1',
-```
-
----
+Si necesitas cambiar la URL base de la API en desarrollo, ajústala en [frontend/src/api/client.ts](frontend/src/api/client.ts).
 
 ## Ejecución en Desarrollo
 
-**Terminal 1 — Backend:**
+**Terminal 1 — Backend**
+
 ```bash
 cd backend
 npm run start:dev
-# Servidor en http://localhost:3001/api/v1
 ```
 
-**Terminal 2 — Frontend:**
+Backend disponible en `http://localhost:3001/api/v1`.
+
+**Terminal 2 — Frontend**
+
 ```bash
 cd frontend
 npm run dev
-# App en http://localhost:5173
 ```
 
-### Credenciales por defecto
+Frontend disponible en `http://localhost:5173`.
 
-```
-Email:     admin@umbral.cl
-Password:  Umbral2024!
-```
+### Credenciales iniciales
 
-> ⚠️ Cambia estas credenciales inmediatamente después de la primera instalación.
+Las credenciales del administrador dependen de `ADMIN_EMAIL` y `ADMIN_PASSWORD` del `.env` del backend.
 
----
+El repositorio ya no define una contraseña fija de administrador.
 
-## Estructura del Proyecto
+## Funcionalidades Relevantes
 
-```
+### Autenticación y Seguridad
+- Login con JWT
+- MFA opcional con TOTP
+- Auditoría enriquecida con `correlationId` y código HTTP
+- Registro de fallos de login y MFA
+- `AuditLog` append-only a nivel de PostgreSQL
+
+### Gestión de Pacientes
+- CRUD con soft delete
+- Búsqueda por nombre o RUT desde backend mediante query `q`
+- Historial de cambios con motivo obligatorio
+- Restricción por propietario y rol sobre acceso clínico
+
+### Consultas Clínicas
+- Registro de sesiones presenciales y telemedicina
+- Versionado legal: las correcciones crean una nueva versión vigente
+- Consentimiento informado obligatorio para toda consulta
+- Consentimiento de telemedicina obligatorio para sesiones `TELEMED`
+
+### Reportes y Documentos
+- Exportación PDF de ficha clínica
+- Control de acceso por paciente para reportes y documentos
+
+### Operación
+- Script de instalación con secretos generados o inyectados por entorno
+- Backup usando `DATABASE_URL` en vez de una contraseña hardcodeada en script
+
+## Estructura
+
+```text
 control-fichas/
 ├── backend/
-│   ├── prisma/
-│   │   ├── schema.prisma         # Modelos de base de datos
-│   │   └── migrations/           # Historial de migraciones
-│   ├── src/
-│   │   ├── common/
-│   │   │   ├── guards/           # JWT Guard, Roles Guard
-│   │   │   ├── decorators/       # CurrentUser, Roles
-│   │   │   └── interceptors/     # Audit Interceptor
-│   │   ├── modules/
-│   │   │   ├── auth/             # Login, JWT, MFA
-│   │   │   ├── patients/         # CRUD de pacientes
-│   │   │   ├── consultations/    # Registro clínico
-│   │   │   ├── reports/          # Generación de PDF
-│   │   │   └── audit/            # Bitácora inmutable
-│   │   └── prisma/               # Servicio Prisma
-│   └── .env.example
 ├── frontend/
-│   └── src/
-│       ├── api/                  # Cliente HTTP (Axios)
-│       ├── context/              # AuthContext
-│       ├── components/           # Layout, Sidebar
-│       └── pages/                # Login, Dashboard, Pacientes, Consultas, Seguridad
 ├── backups/
-│   └── backup.sh                 # Script de backup automático
+├── install.sh
 └── README.md
 ```
 
----
+## Documentación por módulo
 
-## Funcionalidades
-
-### Autenticación y Seguridad
-- Login con email y contraseña (hash Argon2)
-- Tokens JWT con expiración configurable
-- MFA opcional con TOTP (compatible con Google Authenticator y Authy)
-- Guards de autenticación y control de roles (RBAC)
-- Headers HTTP seguros con Helmet.js
-
-### Gestión de Pacientes (Ley 20.584)
-- Ficha completa con datos de identificación, contacto de emergencia y red de salud
-- Registro de consentimiento informado y acuerdo de telemedicina
-- Soft delete — los registros nunca se eliminan físicamente
-- Búsqueda por nombre o RUT
-
-### Registro Clínico
-- Registro cronológico de sesiones con fecha y hora automática
-- Campos: motivo de consulta, intervención, acuerdos y próxima sesión
-- Soporte para sesiones presenciales y telemedicina
-- Sistema de versionado legal — las correcciones crean nuevas versiones sin alterar el original
-
-### Exportación PDF
-- Generación de ficha clínica completa en PDF
-- Incluye datos del paciente e historial clínico completo
-- Pie de página con referencia a Ley 20.584 y custodia obligatoria de 15 años
-
-### Auditoría (Bitácora Inmutable)
-- Registro automático de todas las acciones del sistema
-- Campos: usuario, acción, recurso, IP, user-agent y timestamp
-- Tabla append-only — ningún registro puede modificarse ni eliminarse
-
-### Backups Automáticos
-- Script de backup diario programado vía cron (2:00 AM)
-- Compresión gzip de los respaldos
-- Retención automática de 30 días
-- Log de ejecución en `backups/backup.log`
-
----
-
-## API Endpoints
-
-### Autenticación
-```
-POST /api/v1/auth/login
-POST /api/v1/auth/mfa/verify
-POST /api/v1/auth/mfa/generate  🔒
-POST /api/v1/auth/mfa/enable    🔒
-POST /api/v1/auth/mfa/disable   🔒
-```
-
-### Pacientes
-```
-GET    /api/v1/patients         🔒
-POST   /api/v1/patients         🔒
-GET    /api/v1/patients/:id     🔒
-PATCH  /api/v1/patients/:id     🔒
-DELETE /api/v1/patients/:id     🔒
-```
-
-### Consultas
-```
-POST  /api/v1/consultations                        🔒
-GET   /api/v1/consultations/patient/:patientId     🔒
-GET   /api/v1/consultations/:id                    🔒
-PATCH /api/v1/consultations/:id/correct            🔒
-```
-
-### Reportes
-```
-GET /api/v1/reports/patient/:patientId    🔒
-```
-
-> 🔒 Requiere token JWT en el header `Authorization: Bearer <token>`
-
----
-
-## Configuración de Backups
-
-El script de backup está en `backups/backup.sh`. Para activarlo:
-
-```bash
-chmod +x backups/backup.sh
-
-# Agregar al cron (ejecuta todos los días a las 2:00 AM)
-crontab -e
-```
-
-Agregar la siguiente línea:
-
-```
-0 2 * * * /ruta/completa/control-fichas/backups/backup.sh >> /ruta/completa/control-fichas/backups/backup.log 2>&1
-```
-
----
-
-## Cumplimiento Legal
-
-| Requisito | Implementación |
-|---|---|
-| Ficha clínica obligatoria | Módulo de pacientes con todos los campos exigidos |
-| Secreto profesional | Datos cifrados en tránsito (HTTPS en producción) |
-| Custodia 15 años | Soft delete + backups automáticos con retención configurable |
-| Derecho del paciente a su ficha | Exportación PDF bajo demanda |
-| Inalterabilidad de registros | Versionado en consultas + soft delete en pacientes |
-| Bitácora de accesos | Audit Log inmutable con registro de todas las acciones |
-
----
-
-## Variables de Entorno
-
-| Variable | Descripción | Ejemplo |
-|---|---|---|
-| `DATABASE_URL` | URL de conexión PostgreSQL | `postgresql://user:pass@localhost:5432/db` |
-| `JWT_SECRET` | Clave secreta para firmar tokens | Cadena aleatoria larga |
-| `JWT_EXPIRES_IN` | Tiempo de expiración del token | `8h` |
-| `MFA_APP_NAME` | Nombre que aparece en la app autenticadora | `Umbral SpA` |
-| `FRONTEND_URL` | URL del frontend (para CORS) | `http://localhost:5173` |
-
----
-
-## Licencia
-
-Uso privado — Umbral SpA © 2026. Todos los derechos reservados.
+- [backend/README.md](backend/README.md)
+- [frontend/README.md](frontend/README.md)

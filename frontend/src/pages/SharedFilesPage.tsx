@@ -5,6 +5,7 @@ import {
   BookOpen, File, Search, X, Plus, AlertCircle, Pencil, ExternalLink,
 } from 'lucide-react';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const CATEGORIES = [
   { value: '', label: 'Todos' },
@@ -61,7 +62,7 @@ export default function SharedFilesPage() {
   const [error, setError] = useState('');
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const { user } = useAuth();
 
   const [form, setForm] = useState({
     name: '',
@@ -182,11 +183,11 @@ export default function SharedFilesPage() {
   );
 
   const canEdit = (file: SharedFile) =>
-    ['DIRECTOR', 'ADMIN'].includes(user?.role) ||
+    ['DIRECTOR', 'ADMIN'].includes(user?.role ?? '') ||
     file.uploadedBy?.name === user?.name;
 
   const canDelete = (file: SharedFile) =>
-    ['DIRECTOR', 'ADMIN'].includes(user?.role) ||
+    ['DIRECTOR', 'ADMIN'].includes(user?.role ?? '') ||
     file.uploadedBy?.name === user?.name;
 
   return (

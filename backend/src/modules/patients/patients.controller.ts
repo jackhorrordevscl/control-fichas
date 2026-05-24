@@ -14,6 +14,7 @@ import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 
 @Controller('patients')
 export class PatientsController {
@@ -31,26 +32,26 @@ export class PatientsController {
   // ── Rutas protegidas ────────────────────────────────────────────
   @UseGuards(JwtAuthGuard)
   @Post()
-  create(@Body() dto: CreatePatientDto, @CurrentUser() user: any) {
-    return this.patientsService.create(dto, user.id);
+  create(@Body() dto: CreatePatientDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.patientsService.create(dto, user.userId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  findAll(@CurrentUser() user: any) {
-    return this.patientsService.findAll(user.id, user.role);
+  findAll(@CurrentUser() user: any, @Query('q') query?: string) {
+    return this.patientsService.findAll(user.userId, user.role, query);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get(':id/history')
   getHistory(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.patientsService.getHistory(id, user.id, user.role);
+    return this.patientsService.getHistory(id, user.userId, user.role);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.patientsService.findOne(id, user.id, user.role);
+    return this.patientsService.findOne(id, user.userId, user.role);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -60,12 +61,12 @@ export class PatientsController {
     @Body() dto: UpdatePatientDto,
     @CurrentUser() user: any,
   ) {
-    return this.patientsService.update(id, dto, user.id, user.role);
+    return this.patientsService.update(id, dto, user.userId, user.role);
   }
 
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
   softDelete(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.patientsService.softDelete(id, user.id, user.role);
+    return this.patientsService.softDelete(id, user.userId, user.role);
   }
 }

@@ -1,20 +1,33 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL ?? '',
+});
+
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const passwordHash = await argon2.hash('Umbral2024!');
+  const adminPassword = process.env.ADMIN_PASSWORD?.trim();
+
+  if (!adminPassword) {
+    throw new Error('ADMIN_PASSWORD es obligatorio para ejecutar el seed del administrador');
+  }
+
+  const adminEmail = process.env.ADMIN_EMAIL?.trim() || 'admin@umbral.cl';
+  const adminName = process.env.ADMIN_NAME?.trim() || 'Administrador Umbral';
+  const passwordHash = await argon2.hash(adminPassword);
 
   const user = await prisma.user.upsert({
-    where: { email: 'admin@umbral.cl' },
+    where: { email: adminEmail },
     update: {},
     create: {
-      email: 'admin@umbral.cl',
+      email: adminEmail,
       passwordHash,
-      name: 'Administrador Umbral',
+      name: adminName,
       role: 'ADMIN',
       mfaEnabled: false,
     },

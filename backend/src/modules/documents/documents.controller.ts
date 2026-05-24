@@ -16,6 +16,7 @@ import type { Response } from 'express';
 import { DocumentsService } from './documents.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 
 @UseGuards(JwtAuthGuard)
 @Controller('documents')
@@ -48,19 +49,40 @@ export class DocumentsController {
     @UploadedFile() file: Express.Multer.File,
     @Body('patientId') patientId: string,
     @Body('type') type: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.documentsService.uploadDocument(patientId, user.id, file, type);
+    return this.documentsService.uploadDocument(
+      patientId,
+      user.userId,
+      user.role,
+      file,
+      type,
+    );
   }
 
   @Get('patient/:patientId')
-  findByPatient(@Param('patientId') patientId: string) {
-    return this.documentsService.findByPatient(patientId);
+  findByPatient(
+    @Param('patientId') patientId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.documentsService.findByPatient(
+      patientId,
+      user.userId,
+      user.role,
+    );
   }
 
   @Get(':id/download')
-  async download(@Param('id') id: string, @Res() res: Response) {
-    const doc = await this.documentsService.getDocument(id);
+  async download(
+    @Param('id') id: string, 
+    @CurrentUser() user: AuthenticatedUser,
+    @Res() res: Response
+  ) {
+    const doc = await this.documentsService.getDocument(
+      id,
+      user.userId,
+      user.role,
+    );
     const filePath = join(process.cwd(), doc.storagePath);
     res.download(filePath, doc.fileName);
   }

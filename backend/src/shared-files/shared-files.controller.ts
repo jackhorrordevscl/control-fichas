@@ -12,15 +12,13 @@ import {
   UploadedFile,
   Res,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
 import { SharedFilesService } from './shared-files.service';
-import type { UploadFileDto } from './shared-files.service';
 import { FileCategory } from '@prisma/client';
+import type { Response } from 'express'
 
 @Controller('shared-files')
 @UseGuards(JwtAuthGuard)
@@ -28,55 +26,135 @@ export class SharedFilesController {
   constructor(private readonly sharedFilesService: SharedFilesService) {}
 
   @Get()
-  findAll(@Query('category') category?: FileCategory) {
-    return this.sharedFilesService.findAll(category);
+  findAll(
+    @Query('category') category: FileCategory | undefined,
+    @Req() req: any,
+  ) {
+    return this.sharedFilesService.findAll(
+      category,
+      req.user.role,
+      req.user.userId,
+    );
   }
+  
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  async findOne(
+    @Param('id') id: string,
+    @Req() req: any,
+  ) {
+    await this.sharedFilesService.validateAccess(
+      id,
+      req.user.userId,
+      req.user.role,
+    );
+
     return this.sharedFilesService.findOne(id);
   }
 
   @Get(':id/download')
-  async download(@Param('id') id: string, @Res() res: Response) {
-    const file = await this.sharedFilesService.findOne(id);
-    const filePath = await this.sharedFilesService.getFilePath(id);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${encodeURIComponent(file.originalName)}"`,
+  async downloadFile(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Res() res: Response,
+  ) {
+    await this.sharedFilesService.validateAccess(
+      id,
+      req.user.userId,
+      req.user.role,
     );
-    res.setHeader('Content-Type', file.mimetype);
-    (res as any).sendFile(filePath);
+
+    const file =
+      await this.sharedFilesService.findOne(id);
+
+    return res.download(
+      file.path, 
+      file.filename
+    );
   }
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
-  uploadFile(
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: 10 * 1024 * 1024,
+      },
+
+      fileFilter: (req, file, cb) => {
+        const allowedMimeTypes = [
+          'application/pdf',
+          'image/jpeg',
+          'image/png',
+        ];
+
+        if (
+          !allowedMimeTypes.includes(file.mimetype)
+        ) {
+          return cb(
+            new BadRequestException(
+              'Tipo de archivo no permitido',
+            ),
+            false,
+          );
+        }
+
+        cb (null, true);
+      },
+    }),
+  )
+  async uploadFile(
     @UploadedFile() file: Express.Multer.File,
-    @Body()
-    dto: { name: string; description?: string; category?: FileCategory },
     @Req() req: any,
   ) {
-    return this.sharedFilesService.uploadFile(file, dto, req.user.id);
+    if (!file) {
+      throw new BadRequestException(
+        'Debe adjuntar un archivo válido',
+      );
+    }
+
+    const sanitizedFileName = 
+    file.originalname.replace(
+      /[^a-zA-Z0-9.\-.]/g,
+      '_',
+    );
+
+    file.originalname = sanitizedFileName;
+
+    return this.sharedFilesService.uploadFile(
+      file,
+      req.user.userId,
+    );
   }
 
   @Patch(':id')
   updateFile(
     @Param('id') id: string,
     @Body()
-    dto: { name?: string; description?: string; category?: FileCategory },
+    dto: { 
+      name?: string; 
+      description?: string; 
+      category?: FileCategory;
+    },
+
     @Req() req: any,
   ) {
     return this.sharedFilesService.updateFile(
       id,
       dto,
-      req.user.id,
+      req.user.userId,
       req.user.role,
     );
   }
 
   @Delete(':id')
-  deleteFile(@Param('id') id: string, @Req() req: any) {
-    return this.sharedFilesService.deleteFile(id, req.user.id, req.user.role);
+  deleteFile(
+    @Param('id') id: string,
+    @Req() req: any,
+  ) {
+    return this.sharedFilesService.deleteFile(
+      id, 
+      req.user.userId, 
+      req.user.role
+    );
   }
 }

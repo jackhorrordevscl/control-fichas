@@ -1,3 +1,70 @@
+# Backend Umbral SpA
+
+API clínica construida con NestJS 11, Prisma 7.8 y PostgreSQL.
+
+## Stack real
+
+- NestJS 11
+- Prisma 7.8 con `@prisma/adapter-pg`
+- PostgreSQL
+- JWT + Passport
+- Argon2
+- Speakeasy + QRCode para MFA
+- PDFKit para reportes
+
+## Comandos
+
+```bash
+npm install
+npm run prisma:generate
+npm run prisma:migrate:status
+npm run prisma:migrate:deploy
+npm run build
+npm run start:dev
+npm run test
+npm run test:e2e
+npm run seed
+```
+
+## Variables principales
+
+El backend espera un archivo `.env` con al menos estos valores:
+
+```env
+DATABASE_URL="postgresql://usuario:password@localhost:5432/base"
+JWT_SECRET="secreto-seguro"
+JWT_EXPIRES_IN="8h"
+MFA_APP_NAME="Umbral SpA"
+FRONTEND_URL="http://localhost:5173"
+ADMIN_EMAIL="admin@umbral.cl"
+ADMIN_PASSWORD="clave-segura"
+ADMIN_NAME="Administrador Umbral"
+```
+
+## Notas operativas
+
+- `prisma.config.ts` gobierna la conexión de Prisma.
+- El seed del administrador ya no usa una contraseña hardcodeada: requiere `ADMIN_PASSWORD`.
+- `AuditLog` es append-only a nivel de PostgreSQL.
+- Las correcciones de consultas crean una nueva versión vigente y no sobreescriben el registro original.
+- Toda consulta requiere consentimiento informado firmado; `TELEMED` además exige consentimiento de telemedicina.
+
+## Despliegue seguro de migraciones
+
+Para bases activas, especialmente la instancia productiva ya desplegada en Supabase, el flujo recomendado es explícito y no destructivo:
+
+```bash
+npm run prisma:migrate:status
+npm run prisma:migrate:deploy
+```
+
+Consideraciones mínimas antes de correrlo:
+
+- Confirma que `DATABASE_URL` apunta al entorno correcto antes de ejecutar cualquier comando.
+- Genera snapshot o respaldo previo desde la plataforma si vas a tocar producción.
+- Usa `prisma migrate deploy` en staging o producción; no uses `prisma migrate dev` contra una base real.
+- Evita ejecutar localmente estos comandos con credenciales productivas salvo que sea un procedimiento controlado.
+- En este proyecto, la migración pendiente agrega el campo obligatorio `reason` a `ConsultationHistory` con un valor por defecto, por lo que el cambio esperado es aditivo.
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>

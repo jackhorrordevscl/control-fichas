@@ -1,7 +1,11 @@
-import { IsString, IsOptional, IsDateString, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsDateString, IsEnum, IsNotEmpty } from 'class-validator';
 import { SessionType } from './create-consultation.dto';
 
 export class CorrectConsultationDto {
+  @IsString()
+  @IsNotEmpty()
+  reason: string;
+
   @IsOptional()
   @IsDateString()
   sessionDate?: string;

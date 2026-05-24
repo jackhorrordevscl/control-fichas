@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from 'src/common/interfaces/authenticated-user.interface';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
@@ -47,7 +49,7 @@ export class UsersController {
 
   @Delete(':id')
   @Roles('ADMIN', 'DIRECTOR', 'COORDINATOR')
-  softDelete(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.usersService.softDelete(id, user.id);
+  softDelete(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.softDelete(id, user.userId);
   }
 }

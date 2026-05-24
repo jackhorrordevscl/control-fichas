@@ -3,28 +3,51 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
+import { AuditService } from '../audit/audit.service';
 import * as argon2 from 'argon2';
 import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
+
+interface AuditRequestContext {
+  correlationId?: string;
+  ip?: string;
+  userAgent?: string | string[];
+}
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private auditService: AuditService,
   ) {}
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, context?: AuditRequestContext) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
     if (!user || user.deletedAt) {
+      await this.logAuthEvent({
+        action: 'LOGIN_FAILED',
+        resourceId: dto.email,
+        detail: 'POST /api/v1/auth/login - user not found or disabled',
+        statusCode: 401,
+        context,
+      });
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
     const passwordValid = await argon2.verify(user.passwordHash, dto.password);
     if (!passwordValid) {
+      await this.logAuthEvent({
+        userId: user.id,
+        action: 'LOGIN_FAILED',
+        resourceId: user.id,
+        detail: 'POST /api/v1/auth/login - invalid password',
+        statusCode: 401,
+        context,
+      });
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
@@ -35,15 +58,33 @@ export class AuthService {
       };
     }
 
-    return this.generateToken(user);
+    const token = this.generateToken(user);
+
+    await this.logAuthEvent({
+      userId: user.id,
+      action: 'LOGIN',
+      resourceId: user.id,
+      detail: 'POST /api/v1/auth/login',
+      statusCode: 200,
+      context,
+    });
+
+    return token;
   }
 
-  async verifyMfa(dto: VerifyMfaDto) {
+  async verifyMfa(dto: VerifyMfaDto, context?: AuditRequestContext) {
     const user = await this.prisma.user.findUnique({
       where: { id: dto.userId },
     });
 
     if (!user || !user.mfaSecret) {
+      await this.logAuthEvent({
+        action: 'MFA_FAILED',
+        resourceId: dto.userId,
+        detail: 'POST /api/v1/auth/mfa/verify - invalid user or missing secret',
+        statusCode: 401,
+        context,
+      });
       throw new UnauthorizedException('Usuario no válido');
     }
 
@@ -55,10 +96,29 @@ export class AuthService {
     });
 
     if (!isValid) {
+      await this.logAuthEvent({
+        userId: user.id,
+        action: 'MFA_FAILED',
+        resourceId: user.id,
+        detail: 'POST /api/v1/auth/mfa/verify - invalid token',
+        statusCode: 401,
+        context,
+      });
       throw new UnauthorizedException('Código MFA inválido');
     }
 
-    return this.generateToken(user);
+    const token = this.generateToken(user);
+
+    await this.logAuthEvent({
+      userId: user.id,
+      action: 'LOGIN',
+      resourceId: user.id,
+      detail: 'POST /api/v1/auth/mfa/verify',
+      statusCode: 200,
+      context,
+    });
+
+    return token;
   }
 
   async generateMfaSecret(userId: string) {
@@ -84,9 +144,17 @@ export class AuthService {
     };
   }
 
-  async enableMfa(userId: string, token: string) {
+  async enableMfa(userId: string, token: string, context?: AuditRequestContext) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.mfaSecret) {
+      await this.logAuthEvent({
+        userId,
+        action: 'MFA_FAILED',
+        resourceId: userId,
+        detail: 'POST /api/v1/auth/mfa/enable - missing secret',
+        statusCode: 401,
+        context,
+      });
       throw new UnauthorizedException('Primero genera el secreto MFA');
     }
 
@@ -98,6 +166,14 @@ export class AuthService {
     });
 
     if (!isValid) {
+      await this.logAuthEvent({
+        userId,
+        action: 'MFA_FAILED',
+        resourceId: userId,
+        detail: 'POST /api/v1/auth/mfa/enable - invalid token',
+        statusCode: 401,
+        context,
+      });
       throw new UnauthorizedException('Código inválido, intenta de nuevo');
     }
 
@@ -109,9 +185,17 @@ export class AuthService {
     return { message: 'MFA activado correctamente' };
   }
 
-  async disableMfa(userId: string, token: string) {
+  async disableMfa(userId: string, token: string, context?: AuditRequestContext) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.mfaSecret) {
+      await this.logAuthEvent({
+        userId,
+        action: 'MFA_FAILED',
+        resourceId: userId,
+        detail: 'POST /api/v1/auth/mfa/disable - MFA not configured',
+        statusCode: 401,
+        context,
+      });
       throw new UnauthorizedException('MFA no está configurado');
     }
 
@@ -123,6 +207,14 @@ export class AuthService {
     });
 
     if (!isValid) {
+      await this.logAuthEvent({
+        userId,
+        action: 'MFA_FAILED',
+        resourceId: userId,
+        detail: 'POST /api/v1/auth/mfa/disable - invalid token',
+        statusCode: 401,
+        context,
+      });
       throw new UnauthorizedException('Código inválido');
     }
 
@@ -151,5 +243,36 @@ export class AuthService {
         name: user.name,
       },
     };
+  }
+
+  private async logAuthEvent(data: {
+    action: string;
+    resourceId: string;
+    detail: string;
+    statusCode: number;
+    userId?: string;
+    context?: AuditRequestContext;
+  }) {
+    await this.auditService.log({
+      userId: data.userId,
+      action: data.action,
+      resource: 'Auth',
+      resourceId: data.resourceId,
+      detail: data.detail,
+      ipAddress: data.context?.ip,
+      userAgent: this.getUserAgent(data.context),
+      correlationId: data.context?.correlationId,
+      statusCode: data.statusCode,
+    }).catch(() => {});
+  }
+
+  private getUserAgent(context?: AuditRequestContext) {
+    if (!context?.userAgent) {
+      return undefined;
+    }
+
+    return Array.isArray(context.userAgent)
+      ? context.userAgent.join(',')
+      : context.userAgent;
   }
 }

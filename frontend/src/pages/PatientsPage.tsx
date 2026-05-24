@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useDeferredValue, useRef, useState } from "react";
 import {
   FileText,
   Upload as UploadIcon,
@@ -103,10 +103,16 @@ export default function PatientsPage() {
   // History state
   const [history, setHistory] = useState<PatientHistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const deferredSearch = useDeferredValue(search.trim());
 
   const { data: patients = [] } = useQuery({
-    queryKey: ["patients"],
-    queryFn: () => api.get("/patients").then((r) => r.data),
+    queryKey: ["patients", deferredSearch],
+    queryFn: () =>
+      api
+        .get("/patients", {
+          params: deferredSearch ? { q: deferredSearch } : undefined,
+        })
+        .then((r) => r.data),
   });
 
   const createMutation = useMutation({
@@ -236,12 +242,6 @@ export default function PatientsPage() {
       setLoadingHistory(false);
     }
   };
-
-  const filtered = patients.filter(
-    (p: Patient) =>
-      p.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      p.rut.toLowerCase().includes(search.toLowerCase().replace(/\./g, "")),
-  );
 
   const handleDownload = async (id: string) => {
     const res = await api.get(`/reports/patient/${id}`, {
@@ -540,14 +540,14 @@ export default function PatientsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {filtered.length === 0 ? (
+            {patients.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-12 text-slate-400">
                   No se encontraron pacientes.
                 </td>
               </tr>
             ) : (
-              filtered.map((p: Patient) => (
+              patients.map((p: Patient) => (
                 <tr key={p.id} className="hover:bg-cream-50 transition-colors">
                   <td className="px-6 py-4">
                     <p className="font-medium text-slate-800">{p.fullName}</p>
@@ -618,12 +618,12 @@ export default function PatientsPage() {
 
       {/* Cards móvil */}
       <div className="md:hidden space-y-3">
-        {filtered.length === 0 ? (
+        {patients.length === 0 ? (
           <div className="card text-center py-8 text-slate-400 text-sm">
             No se encontraron pacientes.
           </div>
         ) : (
-          filtered.map((p: Patient) => (
+          patients.map((p: Patient) => (
             <div key={p.id} className="card p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>

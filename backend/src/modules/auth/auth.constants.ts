@@ -1,0 +1,1 @@
+export const AUTH_COOKIE_NAME = 'umbral_access_token';
