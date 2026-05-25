@@ -19,10 +19,13 @@ export class AuthController {
   ) {}
 
   private getCookieOptions() {
+    const isProduction = this.configService.get('NODE_ENV') === 'production';
+    const sameSite: 'lax' | 'none' = isProduction ? 'none' : 'lax';
+
     return {
       httpOnly: true,
-      sameSite: 'lax' as const,
-      secure: this.configService.get('NODE_ENV') === 'production',
+      sameSite,
+      secure: isProduction,
       path: '/',
     };
   }

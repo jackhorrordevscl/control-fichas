@@ -132,4 +132,36 @@ describe('AuthController', () => {
     });
     expect(result).toEqual({ message: 'Sesión cerrada correctamente' });
   });
+
+  it('usa SameSite none y Secure en producción para permitir frontend en otro dominio', async () => {
+    const res = createResponse();
+    configServiceMock.get.mockImplementation((key: string) => {
+      if (key === 'NODE_ENV') {
+        return 'production';
+      }
+
+      return undefined;
+    });
+    authServiceMock.login.mockResolvedValue({
+      accessToken: 'jwt-token',
+      user: { id: 'user-1', email: 'user@umbral.cl', role: 'ADMIN', name: 'Admin' },
+    });
+
+    await controller.login(
+      { email: 'user@umbral.cl', password: '12345678' },
+      {
+        correlationId: 'corr-1',
+        ip: '127.0.0.1',
+        headers: { 'user-agent': 'jest' },
+      } as any,
+      res,
+    );
+
+    expect(res.cookie).toHaveBeenCalledWith(AUTH_COOKIE_NAME, 'jwt-token', {
+      httpOnly: true,
+      sameSite: 'none',
+      secure: true,
+      path: '/',
+    });
+  });
 });

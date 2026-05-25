@@ -81,6 +81,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const session = loadSession();
     setUser(session.user);
 
+    const isLoginRoute = window.location.pathname === '/login';
+
+    if (!session.user && isLoginRoute) {
+      setRestoredUser(null);
+      setIsLoading(false);
+
+      return () => {
+        isActive = false;
+        window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+      };
+    }
+
     restoreSessionFromServer()
       .then((restoredUser) => {
         if (!isActive) {
