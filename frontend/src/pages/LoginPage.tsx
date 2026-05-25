@@ -68,14 +68,7 @@ function PublicSessionQuery() {
     return (
       <div className="mt-6 text-center">
         <div className="border-t border-slate-200 pt-5">
-          <p className="text-sm text-slate-500 mb-3">¿Eres paciente?</p>
-          <button
-            onClick={() => setOpen(true)}
-            className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-lg transition-colors"
-          >
-            <Calendar className="w-4 h-4" />
-            Consulta aquí tu próxima sesión
-          </button>
+          
         </div>
       </div>
     );
@@ -239,29 +232,34 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 flex">
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12"
-        style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1a2e1a 50%, #0f2318 100%)' }}>
+      <div
+        className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12"
+        style={{
+          background:
+            "linear-gradient(135deg, #0f172a 0%, #1a2e1a 50%, #0f2318 100%)",
+        }}
+      >
         <div>
           <h1 className="font-display text-4xl text-white">Umbral</h1>
-          <p className="text-sage-300 text-sm mt-1">SpA — Gestión Clínica</p>
+          <p className="text-sage-300 text-sm mt-1">Gestión Clínica</p>
         </div>
         <div>
           <blockquote className="font-display text-2xl text-white leading-relaxed italic">
             "El cuidado del paciente comienza con el cuidado del registro."
           </blockquote>
           <p className="text-slate-400 text-sm mt-4">
-            Sistema de gestión clínica conforme a Ley 20.584
+            Sistema de gestión clínica conforme a Ley 20.584 & 21.719
           </p>
         </div>
         <div className="text-slate-500 text-xs">
-          © 2026 Umbral SpA — Datos protegidos bajo Ley 19.628
+          © 2026 Ground Zero Devs — Datos protegidos bajo Ley 19.628
         </div>
       </div>
 
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-cream-50">
         <div className="w-full max-w-md">
           <div className="mb-10">
-            <h2 className="font-display text-3xl text-slate-900">Bienvenida</h2>
+            <h2 className="font-display text-3xl text-slate-900">Bienvenid@</h2>
             <p className="text-slate-500 text-sm mt-2">
               Ingresa tus credenciales para acceder al sistema
             </p>
@@ -269,28 +267,36 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Email
+              </label>
               <input
-                {...register('email')}
+                {...register("email")}
                 type="email"
                 placeholder="tu@email.com"
                 className="input-field"
               />
               {errors.email && (
-                <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+                <p className="text-red-500 text-xs mt-1">
+                  {errors.email.message}
+                </p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Contraseña
+              </label>
               <input
-                {...register('password')}
+                {...register("password")}
                 type="password"
                 placeholder="••••••••"
                 className="input-field"
               />
               {errors.password && (
-                <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
+                <p className="text-red-500 text-xs mt-1">
+                  {errors.password.message}
+                </p>
               )}
             </div>
 
@@ -305,7 +311,7 @@ export default function LoginPage() {
               disabled={loading}
               className="btn-primary w-full py-3 text-base disabled:opacity-50"
             >
-              {loading ? 'Ingresando...' : 'Ingresar'}
+              {loading ? "Ingresando..." : "Ingresar"}
             </button>
           </form>
 
