@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PatientsService } from '../patients/patients.service';
 import { ConsultationsService } from './consultations.service';
@@ -13,7 +14,8 @@ describe('ConsultationsService', () => {
     },
     consultation: {
       create: jest.fn(),
-      findUniqueOrThrow: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
       findUniqueOrThrow: jest.fn(),
       update: jest.fn(),
     },
@@ -150,6 +152,35 @@ describe('ConsultationsService', () => {
         storagePath: '/tmp/informe.pdf',
       }),
     });
+  });
+
+  it('lista consultas existentes aunque falte la migración de adjuntos en el entorno', async () => {
+    patientsServiceMock.findOne.mockResolvedValue({ id: 'patient-1' });
+    prismaMock.consultation.findMany
+      .mockRejectedValueOnce({
+        code: 'P2022',
+        message: 'The column `PatientDocument.consultationId` does not exist',
+      } as Prisma.PrismaClientKnownRequestError)
+      .mockResolvedValueOnce([
+        {
+          id: 'consultation-1',
+          consultReason: 'Seguimiento',
+          history: [],
+          therapist: { name: 'Terapeuta', email: 'tera@umbral.cl' },
+        },
+      ]);
+
+    await expect(
+      service.findByPatient('patient-1', 'user-1', 'THERAPIST'),
+    ).resolves.toEqual([
+      {
+        id: 'consultation-1',
+        consultReason: 'Seguimiento',
+        history: [],
+        therapist: { name: 'Terapeuta', email: 'tera@umbral.cl' },
+        documents: [],
+      },
+    ]);
   });
 
   it('crea una nueva version vigente al corregir una consulta', async () => {

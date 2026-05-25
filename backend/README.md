@@ -65,6 +65,19 @@ Consideraciones mínimas antes de correrlo:
 - Usa `prisma migrate deploy` en staging o producción; no uses `prisma migrate dev` contra una base real.
 - Evita ejecutar localmente estos comandos con credenciales productivas salvo que sea un procedimiento controlado.
 - En este proyecto, la migración pendiente agrega el campo obligatorio `reason` a `ConsultationHistory` con un valor por defecto, por lo que el cambio esperado es aditivo.
+
+## Render
+
+Si despliegas el backend en Render, el servicio debe ejecutar migraciones explícitamente antes de iniciar la app. Si no lo hace, puede quedar código nuevo corriendo contra un esquema antiguo y provocar errores `500` en lecturas como consultas por paciente.
+
+Flujo recomendado en Render:
+
+```bash
+Build Command: cd backend && npm install && npm run build
+Start Command: cd backend && npm run prisma:migrate:deploy && npm run start:prod
+```
+
+Si el servicio ya está creado con otro `Start Command`, corrige esa configuración en Render o ejecuta manualmente `npm run prisma:migrate:deploy` sobre la base productiva antes de reintentar el despliegue.
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>

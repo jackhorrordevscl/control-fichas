@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: control-fichas-backend
+    env: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm run prisma:migrate:deploy && npm run start:prod

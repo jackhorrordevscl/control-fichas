@@ -32,6 +32,16 @@ const consultationInclude = {
   },
 } satisfies Prisma.ConsultationInclude;
 
+const consultationIncludeWithoutDocuments = {
+  therapist: { select: { name: true, email: true } },
+  history: {
+    orderBy: { editedAt: 'desc' as const },
+    include: {
+      editedBy: { select: { name: true, email: true } },
+    },
+  },
+} satisfies Prisma.ConsultationInclude;
+
 @Injectable()
 export class ConsultationsService {
   constructor(
@@ -71,6 +81,92 @@ export class ConsultationsService {
     this.ensureTelemedConsent(patient, sessionType);
   }
 
+  private isConsultationAttachmentSchemaMissing(error: unknown) {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const prismaError = error as { code?: string; message?: string };
+    return prismaError.code === 'P2022';
+  }
+
+  private withEmptyDocuments<T extends object>(record: T): T & { documents: [] } {
+    return {
+      ...record,
+      documents: [],
+    };
+  }
+
+  private async findManyByPatientWithFallback(patientId: string) {
+    try {
+      return await this.prisma.consultation.findMany({
+        where: {
+          patientId,
+          isCurrent: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        include: consultationInclude,
+      });
+    } catch (error) {
+      if (!this.isConsultationAttachmentSchemaMissing(error)) {
+        throw error;
+      }
+
+      const consultations = await this.prisma.consultation.findMany({
+        where: {
+          patientId,
+          isCurrent: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        include: consultationIncludeWithoutDocuments,
+      });
+
+      return consultations.map((consultation) =>
+        this.withEmptyDocuments(consultation),
+      );
+    }
+  }
+
+  private async findOneWithFallback(id: string) {
+    try {
+      return await this.prisma.consultation.findUnique({
+        where: { id },
+        include: consultationInclude,
+      });
+    } catch (error) {
+      if (!this.isConsultationAttachmentSchemaMissing(error)) {
+        throw error;
+      }
+
+      const consultation = await this.prisma.consultation.findUnique({
+        where: { id },
+        include: consultationIncludeWithoutDocuments,
+      });
+
+      return consultation ? this.withEmptyDocuments(consultation) : consultation;
+    }
+  }
+
+  private async findCreatedConsultationWithFallback(id: string) {
+    try {
+      return await this.prisma.consultation.findUniqueOrThrow({
+        where: { id },
+        include: consultationInclude,
+      });
+    } catch (error) {
+      if (!this.isConsultationAttachmentSchemaMissing(error)) {
+        throw error;
+      }
+
+      const consultation = await this.prisma.consultation.findUniqueOrThrow({
+        where: { id },
+        include: consultationIncludeWithoutDocuments,
+      });
+
+      return this.withEmptyDocuments(consultation);
+    }
+  }
+
   async create(
     dto: CreateConsultationDto,
     therapistId: string,
@@ -99,7 +195,7 @@ export class ConsultationsService {
       }
 
       if (!attachment) {
-        return this.prisma.consultation.create({
+        const consultation = await this.prisma.consultation.create({
           data: {
             patientId: dto.patientId,
             therapistId,
@@ -113,11 +209,12 @@ export class ConsultationsService {
             patientRut,
             isCurrent: true,
           },
-          include: consultationInclude,
         });
+
+        return this.findCreatedConsultationWithFallback(consultation.id);
       }
 
-      return await this.prisma.$transaction(async (tx) => {
+      const consultationId = await this.prisma.$transaction(async (tx) => {
         const consultation = await tx.consultation.create({
           data: {
             patientId: dto.patientId,
@@ -145,12 +242,17 @@ export class ConsultationsService {
           },
         });
 
-        return tx.consultation.findUniqueOrThrow({
-          where: { id: consultation.id },
-          include: consultationInclude,
-        });
+        return consultation.id;
       });
+
+      return this.findCreatedConsultationWithFallback(consultationId);
     } catch (error) {
+      if (attachment && this.isConsultationAttachmentSchemaMissing(error)) {
+        throw new ConflictException(
+          'Este entorno aún no tiene habilitados los adjuntos por consulta. Aplica las migraciones pendientes.',
+        );
+      }
+
       if (attachment) {
         try {
           fs.unlinkSync(attachment.path);
@@ -170,14 +272,7 @@ export class ConsultationsService {
   ) {
     await this.ensurePatientAccess(patientId, userId, userRole);
 
-    return this.prisma.consultation.findMany({
-      where: {
-        patientId,
-        isCurrent: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      include: consultationInclude,
-    });
+    return this.findManyByPatientWithFallback(patientId);
   }
 
   async findOne(
@@ -185,10 +280,7 @@ export class ConsultationsService {
     userId: string,
     userRole: string,
   ) {
-    const consultation = await this.prisma.consultation.findUnique({
-      where: { id },
-      include: consultationInclude,
-    });
+    const consultation = await this.findOneWithFallback(id);
     if (!consultation) {
       throw new NotFoundException('Consulta no encontrada');
     }
@@ -245,7 +337,7 @@ export class ConsultationsService {
 
     this.ensureClinicalConsents(patient, nextSessionType);
 
-    return this.prisma.$transaction(async (tx) => {
+    const newConsultationId = await this.prisma.$transaction(async (tx) => {
       const newConsultation = await tx.consultation.create({
         data: {
           patientId: original.patientId,
@@ -290,10 +382,9 @@ export class ConsultationsService {
         ],
       });
 
-      return tx.consultation.findUniqueOrThrow({
-        where: { id: newConsultation.id },
-        include: consultationInclude,
-      });
+      return newConsultation.id;
     });
+
+    return this.findCreatedConsultationWithFallback(newConsultationId);
   }
 }
