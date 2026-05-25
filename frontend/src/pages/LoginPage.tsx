@@ -239,10 +239,21 @@ export default function LoginPage() {
             "linear-gradient(135deg, #0f172a 0%, #1a2e1a 50%, #0f2318 100%)",
         }}
       >
-        <div>
+        <div className="flex items-center gap-4">
+          <img src="/favicon.png" alt="Umbral Logo" className="w-14 h-14 object-contain" />
+            <div>
+              <h1 className='font-display text-4xl text-white'>
+                Umbral
+              </h1>
+              <p className='text-sage-300 text-sm mt-1'>
+                Gestión Fichas Clínicas
+              </p>
+            </div>
+        </div>
+        {/* <div>    
           <h1 className="font-display text-4xl text-white">Umbral</h1>
           <p className="text-sage-300 text-sm mt-1">Gestión Clínica</p>
-        </div>
+        </div> */}
         <div>
           <blockquote className="font-display text-2xl text-white leading-relaxed italic">
             "El cuidado del paciente comienza con el cuidado del registro."
