@@ -1,0 +1,39 @@
+{
+  "name": "control-fichas-devcontainer",
+
+  "dockerComposeFile": "docker-compose.yml",
+
+  "service": "app",
+
+  "workspaceFolder": "/workspace",
+
+  "shutdownAction": "stopCompose",
+
+  "remoteUser": "node",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "ms-vscode-remote.remote-containers",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "Prisma.prisma",
+        "bradlc.vscode-tailwindcss",
+        "formulahendry.auto-rename-tag",
+        "christian-kohler.path-intellisense",
+        "eamodio.gitlens"
+      ]
+    }
+  },
+
+  "forwardPorts": [
+    5173,
+    3001,
+    5432,
+    8080
+  ],
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh"
+
+}
