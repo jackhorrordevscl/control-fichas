@@ -53,19 +53,28 @@ export default function Layout() {
           </button>
         </div>
         <nav className="flex-1 px-3 py-6 space-y-1">
-          {navLinks.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                `sidebar-link ${isActive ? 'active' : ''}`
-              }
-            >
-              <Icon size={18} />
-              {label}
-            </NavLink>
-          ))}
+          {navLinks.map(({ to, icon: Icon, label }) => {
+            const isUsers = label === 'Usuarios';
+            const isDisabled = isUsers && (user?.role ?? '') !== 'ADMIN';
+
+            if (isDisabled) {
+              return null;
+            }
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `sidebar-link ${isActive ? 'active' : ''}`
+                }
+              >
+                <Icon size={18} />
+                {label}
+              </NavLink>
+            );
+          })}
         </nav>
         <div className="px-3 py-4 border-t border-slate-800">
           <div className="px-4 py-2 mb-2">
