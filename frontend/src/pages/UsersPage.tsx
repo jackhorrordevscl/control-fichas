@@ -40,7 +40,7 @@ const roleIcon = (role: string) => {
   }
 };
 
-const CAN_EDIT_ROLES = ['ADMIN', 'DIRECTOR', 'COORDINATOR'];
+const CAN_EDIT_ROLES = ['ADMIN', 'DIRECTOR'];
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
@@ -136,8 +136,10 @@ export default function UsersPage() {
     const data: any = {
       name: editForm.name,
       email: editForm.email,
-      role: editForm.role,
     };
+    if (canEditRoles) {
+      data.role = editForm.role;
+    }
     if (editForm.password) data.password = editForm.password;
 
     updateMutation.mutate({ id: editingUser.id, data });
@@ -236,12 +238,16 @@ export default function UsersPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Rol</label>
-              <select className="input-field" value={form.role}
-                onChange={e => setForm({ ...form, role: e.target.value })}>
-                {ROLES.map(r => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
+              {canEditRoles ? (
+                <select className="input-field" value={form.role}
+                  onChange={e => setForm({ ...form, role: e.target.value })}>
+                  {ROLES.map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input className="input-field bg-slate-50" value="Terapeuta" readOnly />
+              )}
             </div>
           </div>
           {error && (
@@ -388,12 +394,16 @@ export default function UsersPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Rol</label>
-                <select className="input-field" value={editForm.role}
-                  onChange={e => setEditForm({ ...editForm, role: e.target.value })}>
-                  {ROLES.map(r => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
+                {canEditRoles ? (
+                  <select className="input-field" value={editForm.role}
+                    onChange={e => setEditForm({ ...editForm, role: e.target.value })}>
+                    {ROLES.map(r => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input className="input-field bg-slate-50" value={editForm.role} readOnly />
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">

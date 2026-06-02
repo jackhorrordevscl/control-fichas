@@ -37,14 +37,14 @@ export class UsersController {
 
   @Post()
   @Roles('ADMIN', 'DIRECTOR', 'COORDINATOR')
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  create(@Body() dto: CreateUserDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.create(dto, user.userId, user.role);
   }
 
   @Patch(':id')
   @Roles('ADMIN', 'DIRECTOR', 'COORDINATOR')
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.update(id, dto, user.userId, user.role);
   }
 
   @Delete(':id')

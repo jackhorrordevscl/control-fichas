@@ -2,6 +2,25 @@ import axios from 'axios';
 import { clearSession } from '../utils/authStorage';
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
+const CSRF_COOKIE_NAME = 'umbral_csrf_token';
+const SAFE_METHODS = new Set(['get', 'head', 'options']);
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
+
+function getCookieValue(name: string) {
+  if (typeof document === 'undefined') {
+    return '';
+  }
+
+  const cookie = document.cookie
+    .split('; ')
+    .find((part) => part.startsWith(`${name}=`));
+
+  if (!cookie) {
+    return '';
+  }
+
+  return decodeURIComponent(cookie.split('=').slice(1).join('='));
+}
 
 const defaultApiUrl =
   typeof window === 'undefined'
@@ -30,5 +49,20 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+api.interceptors.request.use((config) => {
+  const method = (config.method || 'get').toLowerCase();
+
+  if (!SAFE_METHODS.has(method)) {
+    const csrfToken = getCookieValue(CSRF_COOKIE_NAME);
+
+    if (csrfToken) {
+      config.headers = config.headers ?? {};
+      config.headers[CSRF_HEADER_NAME] = csrfToken;
+    }
+  }
+
+  return config;
+});
 
 export default api;

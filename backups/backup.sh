@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="$ROOT_DIR/backend/.env"
 
@@ -24,33 +26,61 @@ BACKUP_DIR="${BACKUP_DIR:-$ROOT_DIR/backups/files}"
 BACKUP_SSD="${BACKUP_SSD:-/mnt/backup-ssd/umbral-backups}"
 DATE=$(date +"%Y-%m-%d_%H-%M-%S")
 BACKUP_FILE="$BACKUP_DIR/umbral_backup_$DATE.sql.gz"
+MANIFEST_FILE="$BACKUP_DIR/umbral_backup_$DATE.manifest.json"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
+
+log() {
+  echo "$1"
+}
 
 # ─── CREAR DIRECTORIOS SI NO EXISTEN ─────────────────────
 mkdir -p "$BACKUP_DIR"
 
 # ─── GENERAR BACKUP ──────────────────────────────────────
-echo "📦 Iniciando backup: $DATE"
+log "📦 Iniciando backup: $DATE"
 pg_dump "$DATABASE_URL" | gzip > "$BACKUP_FILE"
 
-if [ $? -eq 0 ]; then
-  echo "✅ Backup generado: $BACKUP_FILE"
-else
-  echo "❌ Error al generar el backup"
-  exit 1
+log "✅ Backup generado: $BACKUP_FILE"
+
+ENCRYPTED=false
+
+# Si se proporcionó clave de cifrado, cifrar el backup y eliminar el archivo sin cifrar
+if [[ -n "${BACKUP_ENCRYPTION_KEY:-}" ]]; then
+  ENC_FILE="${BACKUP_FILE}.enc"
+  log "🔒 Cifrando backup..."
+  openssl enc -aes-256-cbc -pbkdf2 -salt -in "$BACKUP_FILE" -out "$ENC_FILE" -pass pass:"$BACKUP_ENCRYPTION_KEY"
+  rm -f "$BACKUP_FILE"
+  BACKUP_FILE="$ENC_FILE"
+  ENCRYPTED=true
+  log "✅ Backup cifrado: $BACKUP_FILE"
 fi
+
+sha256sum "$BACKUP_FILE" > "$BACKUP_FILE.sha256"
+cat > "$MANIFEST_FILE" <<EOF
+{
+  "createdAt": "$DATE",
+  "backupFile": "$(basename "$BACKUP_FILE")",
+  "checksumFile": "$(basename "$BACKUP_FILE.sha256")",
+  "encrypted": $ENCRYPTED,
+  "retentionDays": $RETENTION_DAYS
+}
+EOF
+
+log "🧾 Manifest generado: $MANIFEST_FILE"
 
 # ─── COPIAR AL SSD SECUNDARIO (Regla 3-2-1) ──────────────
 if [ -d "$BACKUP_SSD" ]; then
   cp "$BACKUP_FILE" "$BACKUP_SSD/"
-  echo "✅ Copia en SSD secundario: $BACKUP_SSD"
+  cp "$BACKUP_FILE.sha256" "$BACKUP_SSD/"
+  cp "$MANIFEST_FILE" "$BACKUP_SSD/"
+  log "✅ Copia en SSD secundario: $BACKUP_SSD"
 else
-  echo "⚠️  SSD secundario no disponible, omitiendo copia"
+  log "⚠️  SSD secundario no disponible, omitiendo copia"
 fi
 
 # ─── ELIMINAR BACKUPS ANTIGUOS ────────────────────────────
-find "$BACKUP_DIR" -name "*.sql.gz" -mtime +$RETENTION_DAYS -delete
-find "$BACKUP_SSD" -name "*.sql.gz" -mtime +$RETENTION_DAYS -delete 2>/dev/null
-echo "🧹 Backups antiguos eliminados (>${RETENTION_DAYS} días)"
+find "$BACKUP_DIR" -type f \( -name "umbral_backup_*.sql.gz" -o -name "umbral_backup_*.sql.gz.enc" -o -name "umbral_backup_*.sql.gz.sha256" -o -name "umbral_backup_*.sql.gz.enc.sha256" -o -name "umbral_backup_*.manifest.json" \) -mtime +"$RETENTION_DAYS" -delete
+find "$BACKUP_SSD" -type f \( -name "umbral_backup_*.sql.gz" -o -name "umbral_backup_*.sql.gz.enc" -o -name "umbral_backup_*.sql.gz.sha256" -o -name "umbral_backup_*.sql.gz.enc.sha256" -o -name "umbral_backup_*.manifest.json" \) -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
+log "🧹 Backups antiguos eliminados (> ${RETENTION_DAYS} días)"
 
-echo "✅ Proceso completado"
+log "✅ Proceso completado"

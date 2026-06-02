@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import { SharedFilesController } from './shared-files.controller';
 import { SharedFilesService } from './shared-files.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AuditModule } from '../modules/audit/audit.module';
 import { BadRequestException } from '@nestjs/common';
 
 const ALLOWED_MIMETYPES: Record<string, string> = {
@@ -27,6 +28,7 @@ const ALLOWED_MIMETYPES: Record<string, string> = {
 @Module({
   imports: [
     PrismaModule,
+    AuditModule,
     MulterModule.register({
       storage: diskStorage({
         destination: join(process.cwd(), 'uploads', 'shared'),

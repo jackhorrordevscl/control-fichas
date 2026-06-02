@@ -2,6 +2,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PatientsService } from '../patients/patients.service';
 import { DocumentsService } from './documents.service';
+import { AuditService } from '../audit/audit.service';
 import * as fs from 'fs';
 
 jest.mock('../../prisma/prisma.service', () => ({
@@ -12,6 +13,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 jest.mock('fs', () => ({
   unlinkSync: jest.fn(),
+  readFileSync: jest.fn((path: string) => Buffer.from('dummy')),
+  writeFileSync: jest.fn(),
 }));
 
 describe('DocumentsService', () => {
@@ -29,6 +32,10 @@ describe('DocumentsService', () => {
     findOne: jest.fn(),
   };
 
+  const auditServiceMock = {
+    log: jest.fn().mockResolvedValue(undefined),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -37,6 +44,7 @@ describe('DocumentsService', () => {
         DocumentsService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: PatientsService, useValue: patientsServiceMock },
+        { provide: AuditService, useValue: auditServiceMock },
       ],
     }).compile();
 
@@ -60,6 +68,58 @@ describe('DocumentsService', () => {
 
     expect(fs.unlinkSync).toHaveBeenCalledWith('/tmp/file.pdf');
     expect(prismaMock.patientDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('cifra el archivo cuando FILE_ENCRYPTION_KEY está presente y guarda metadatos', async () => {
+    patientsServiceMock.findOne.mockResolvedValue({ id: 'patient-1' });
+    prismaMock.patientDocument.create.mockResolvedValue({ id: 'doc-enc' });
+
+    process.env.FILE_ENCRYPTION_KEY = Buffer.from('0'.repeat(32)).toString('base64');
+
+    await service.uploadDocument(
+      'patient-1',
+      'user-1',
+      'THERAPIST',
+      { path: '/tmp/file.pdf', originalname: 'file.pdf', mimetype: 'application/pdf' } as Express.Multer.File,
+      'INFORMED_CONSENT',
+    );
+
+    expect(prismaMock.patientDocument.create).toHaveBeenCalled();
+    const callArg = prismaMock.patientDocument.create.mock.calls[0][0].data;
+    expect(callArg.encrypted).toBe(true);
+    expect(callArg.encDataKey).toBeDefined();
+    expect(callArg.iv).toBeDefined();
+  });
+
+  it('rechaza documentos clínicos si no hay cifrado configurado', async () => {
+    patientsServiceMock.findOne.mockResolvedValue({ id: 'patient-1' });
+
+    delete process.env.FILE_ENCRYPTION_KEY;
+    delete process.env.KMS_KEY_ID;
+
+    await expect(
+      service.uploadDocument(
+        'patient-1',
+        'user-1',
+        'THERAPIST',
+        { path: '/tmp/file.pdf', originalname: 'file.pdf', mimetype: 'application/pdf', size: 123 } as Express.Multer.File,
+        'INFORMED_CONSENT',
+      ),
+    ).rejects.toThrow('Los documentos clínicos requieren cifrado configurado antes de subirlos');
+  });
+
+  it('rechaza tipos de documento inválidos', async () => {
+    patientsServiceMock.findOne.mockResolvedValue({ id: 'patient-1' });
+
+    await expect(
+      service.uploadDocument(
+        'patient-1',
+        'user-1',
+        'THERAPIST',
+        { path: '/tmp/file.pdf', originalname: 'file.pdf', mimetype: 'application/pdf', size: 123 } as Express.Multer.File,
+        'NOT_A_TYPE',
+      ),
+    ).rejects.toThrow('Tipo de documento inválido');
   });
 
   it('lista documentos solo tras validar acceso al paciente', async () => {

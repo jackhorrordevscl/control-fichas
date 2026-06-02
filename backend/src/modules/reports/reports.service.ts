@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import PDFDocument = require('pdfkit');
 import { PatientsService } from '../patients/patients.service';
+import { getCustodyFooterLines } from '../../common/compliance/custody-policy';
 
 @Injectable()
 export class ReportsService {
@@ -153,8 +154,9 @@ export class ReportsService {
       // ── PIE DE PÁGINA ────────────────────────────────────
       doc.moveDown(2);
       doc.fontSize(9).font('Helvetica')
-        .text('Documento generado por Umbral SpA — Confidencial', { align: 'center' });
-      doc.text('Ley 20.584 — Custodia obligatoria 15 años', { align: 'center' });
+        .text(getCustodyFooterLines()[0], { align: 'center' });
+      doc.text(getCustodyFooterLines()[1], { align: 'center' });
+      doc.text(getCustodyFooterLines()[2], { align: 'center' });
 
       doc.end();
     });

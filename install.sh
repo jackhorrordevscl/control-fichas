@@ -7,6 +7,13 @@ generate_secret() {
   node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 }
 
+STRICT_SECRET_MODE="${STRICT_SECRET_MODE:-false}"
+RAW_DB_PASSWORD="${DB_PASSWORD:-}"
+RAW_JWT_SECRET="${JWT_SECRET:-}"
+RAW_ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
+RAW_BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
+RAW_FILE_ENCRYPTION_KEY="${FILE_ENCRYPTION_KEY:-}"
+
 DB_USER="${DB_USER:-umbral_user}"
 DB_PASSWORD="${DB_PASSWORD:-$(generate_secret)}"
 DB_NAME="${DB_NAME:-umbral_db}"
@@ -15,9 +22,22 @@ ADMIN_EMAIL_VALUE="${ADMIN_EMAIL:-admin@umbral.cl}"
 ADMIN_PASSWORD_VALUE="${ADMIN_PASSWORD:-$(generate_secret)}"
 ADMIN_NAME_VALUE="${ADMIN_NAME:-Administrador Umbral}"
 FRONTEND_URL_VALUE="${FRONTEND_URL:-http://localhost:5173}"
+BACKUP_ENCRYPTION_KEY_VALUE="${BACKUP_ENCRYPTION_KEY:-$(generate_secret)}"
+FILE_ENCRYPTION_KEY_VALUE="${FILE_ENCRYPTION_KEY:-$(generate_secret)}"
+
+if [[ "$STRICT_SECRET_MODE" == "true" ]]; then
+  if [[ -z "$RAW_DB_PASSWORD" ]]; then echo "❌ DB_PASSWORD debe venir definido cuando STRICT_SECRET_MODE=true"; exit 1; fi
+  if [[ -z "$RAW_JWT_SECRET" ]]; then echo "❌ JWT_SECRET debe venir definido cuando STRICT_SECRET_MODE=true"; exit 1; fi
+  if [[ -z "$RAW_ADMIN_PASSWORD" ]]; then echo "❌ ADMIN_PASSWORD debe venir definido cuando STRICT_SECRET_MODE=true"; exit 1; fi
+  if [[ -z "$RAW_BACKUP_ENCRYPTION_KEY" ]]; then echo "❌ BACKUP_ENCRYPTION_KEY debe venir definido cuando STRICT_SECRET_MODE=true"; exit 1; fi
+  if [[ -z "$RAW_FILE_ENCRYPTION_KEY" ]]; then echo "❌ FILE_ENCRYPTION_KEY debe venir definido cuando STRICT_SECRET_MODE=true"; exit 1; fi
+fi
 
 echo "🚀 Instalando Sistema de Gestión Clínica Umbral SpA"
 echo "=================================================="
+if [[ "$STRICT_SECRET_MODE" == "true" ]]; then
+  echo "🔐 Modo estricto activado: no se generarán secretos automáticamente"
+fi
 
 # ─── VERIFICAR NODE ───────────────────────────────────
 echo "📦 Verificando Node.js..."
@@ -86,6 +106,8 @@ FRONTEND_URL="${FRONTEND_URL_VALUE}"
 ADMIN_EMAIL="${ADMIN_EMAIL_VALUE}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD_VALUE}"
 ADMIN_NAME="${ADMIN_NAME_VALUE}"
+BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY_VALUE}"
+FILE_ENCRYPTION_KEY="${FILE_ENCRYPTION_KEY_VALUE}"
 EOL
   echo "✅ .env creado"
 else

@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditBackupService } from './audit-backup.service';
 
 interface CreateAuditLogDto {
   userId?: string;
@@ -15,11 +16,13 @@ interface CreateAuditLogDto {
 
 @Injectable()
 export class AuditService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(AuditService.name);
+
+  constructor(private prisma: PrismaService, private backupService: AuditBackupService) {}
 
   // Único método permitido — solo escritura, nunca update ni delete
   async log(data: CreateAuditLogDto) {
-    return this.prisma.auditLog.create({
+    const record = await this.prisma.auditLog.create({
       data: {
         userId: data.userId ?? null,
         action: data.action as any,
@@ -32,5 +35,16 @@ export class AuditService {
         statusCode: data.statusCode,
       },
     });
+
+    // Fire-and-forget backup to S3; failures should not block the main flow
+    (async () => {
+      try {
+        await this.backupService.backup(record);
+      } catch (e) {
+        this.logger.warn('Audit backup failed', e as any);
+      }
+    })();
+
+    return record;
   }
 }

@@ -20,12 +20,14 @@ import type { AuthenticatedUser } from '../../common/interfaces/authenticated-us
 export class PatientsController {
   constructor(private patientsService: PatientsService) {}
 
-  // ── Ruta pública ────────────────────────────────────────────────
-  @Get('public/next-session')
-  consultarProximaSesion(@Query('rut') rut: string) {
+  // ── Ruta protegida para consulta de próxima sesión (requiere autenticación)
+  @UseGuards(JwtAuthGuard)
+  @Get('next-session')
+  consultarProximaSesion(@Query('rut') rut: string, @CurrentUser() user: any) {
     if (!rut || rut.trim().length < 5) {
       return { found: false, message: 'RUT inválido' };
     }
+    // Requiere autenticación para evitar exposición pública por RUT
     return this.patientsService.consultarSesionPorRut(rut);
   }
 

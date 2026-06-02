@@ -45,6 +45,19 @@ interface PatientHistoryEntry {
   changedBy: { id: string; name: string; role: string };
 }
 
+interface ConsentRecord {
+  id: string;
+  type: string;
+  version: string;
+  textHash: string;
+  method: string;
+  grantedAt: string;
+  revokedAt?: string | null;
+  reason?: string | null;
+  grantedBy?: string | null;
+  revokedBy?: string | null;
+}
+
 const emptyForm = {
   fullName: "",
   rut: "",
@@ -92,8 +105,19 @@ export default function PatientsPage() {
   const [formError, setFormError] = useState("");
   const [documents, setDocuments] = useState<any[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [consents, setConsents] = useState<ConsentRecord[]>([]);
+  const [loadingConsents, setLoadingConsents] = useState(false);
+  const [consentError, setConsentError] = useState("");
+  const [consentForm, setConsentForm] = useState({
+    type: "INFORMED_CONSENT",
+    version: "v1",
+    text: "",
+    method: "IN_PERSON",
+    reason: "",
+  });
+  const [consentFormError, setConsentFormError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [docType, setDocType] = useState("INFORMED_CONSENT");
+  const [docType, setDocType] = useState("OTHER");
 
   // Edit form state
   const [editForm, setEditForm] = useState<Partial<Patient>>({});
@@ -243,6 +267,20 @@ export default function PatientsPage() {
     }
   };
 
+  const loadConsents = async (patientId: string) => {
+    setLoadingConsents(true);
+    setConsentError("");
+    try {
+      const res = await api.get(`/patients/${patientId}/consents`);
+      setConsents(res.data);
+    } catch {
+      setConsents([]);
+      setConsentError("No fue posible cargar los consentimientos del paciente.");
+    } finally {
+      setLoadingConsents(false);
+    }
+  };
+
   const handleDownload = async (id: string) => {
     const res = await api.get(`/reports/patient/${id}`, {
       responseType: "blob",
@@ -287,6 +325,60 @@ export default function PatientsPage() {
     a.download = fileName;
     a.click();
   };
+
+  const createConsentMutation = useMutation({
+    mutationFn: async () => {
+      if (!selected) {
+        throw new Error("No hay paciente seleccionado");
+      }
+
+      return api.post(`/patients/${selected.id}/consents`, {
+        type: consentForm.type,
+        version: consentForm.version,
+        method: consentForm.method,
+        metadata: {
+          source: "frontend",
+          patientId: selected.id,
+          text: consentForm.text.trim(),
+        },
+      });
+    },
+    onSuccess: async () => {
+      setConsentFormError("");
+      if (selected) {
+        await loadConsents(selected.id);
+      }
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.message;
+      setConsentFormError(
+        Array.isArray(msg) ? msg.join(", ") : (msg ?? "Error al registrar consentimiento"),
+      );
+    },
+  });
+
+  const revokeConsentMutation = useMutation({
+    mutationFn: async (consentId: string) => {
+      if (!selected) {
+        throw new Error("No hay paciente seleccionado");
+      }
+
+      return api.post(`/patients/${selected.id}/consents/${consentId}/revoke`, {
+        reason: consentForm.reason.trim() || `Revocación registrada desde la ficha de ${selected.fullName}`,
+      });
+    },
+    onSuccess: async () => {
+      if (selected) {
+        await loadConsents(selected.id);
+      }
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.message;
+      setConsentFormError(
+        Array.isArray(msg) ? msg.join(", ") : (msg ?? "Error al revocar consentimiento"),
+      );
+    },
+  });
 
   const displayRut = (rut: string) => formatRut(rut.replace(/\./g, ""));
 
@@ -577,6 +669,7 @@ export default function PatientsPage() {
                           setSelected(p);
                           setModalTab("detail");
                           loadDocuments(p.id);
+                          loadConsents(p.id);
                         }}
                         className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
                         title="Ver detalle"
@@ -651,6 +744,7 @@ export default function PatientsPage() {
                     setSelected(p);
                     setModalTab("detail");
                     loadDocuments(p.id);
+                    loadConsents(p.id);
                   }}
                   className="btn-secondary text-xs py-1 flex items-center gap-1"
                 >
@@ -781,6 +875,149 @@ export default function PatientsPage() {
                     </p>
                   </div>
                   <div className="mt-4 pt-4 border-t border-slate-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-medium text-slate-700 text-sm">
+                        Consentimientos
+                      </p>
+                      <button
+                        onClick={() => selected && loadConsents(selected.id)}
+                        className="text-xs text-slate-500 hover:text-slate-700"
+                      >
+                        Refrescar
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                          Tipo
+                        </label>
+                        <select
+                          className="input-field text-xs py-1.5"
+                          value={consentForm.type}
+                          onChange={(e) =>
+                            setConsentForm({ ...consentForm, type: e.target.value })
+                          }
+                        >
+                          <option value="INFORMED_CONSENT">Consentimiento informado</option>
+                          <option value="TELEMEDICINE">Telemedicina</option>
+                          <option value="OTHER">Otro</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                          Versión
+                        </label>
+                        <input
+                          className="input-field text-xs py-1.5"
+                          value={consentForm.version}
+                          onChange={(e) =>
+                            setConsentForm({ ...consentForm, version: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                          Medio
+                        </label>
+                        <select
+                          className="input-field text-xs py-1.5"
+                          value={consentForm.method}
+                          onChange={(e) =>
+                            setConsentForm({ ...consentForm, method: e.target.value })
+                          }
+                        >
+                          <option value="IN_PERSON">Presencial</option>
+                          <option value="ELECTRONIC">Electrónico</option>
+                          <option value="PHONE">Telefónico</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                          Texto legal del consentimiento
+                        </label>
+                        <textarea
+                          className="input-field text-xs py-1.5 min-h-24"
+                          placeholder="Pega aquí el texto canónico del consentimiento; el hash se genera al registrar."
+                          value={consentForm.text}
+                          onChange={(e) =>
+                            setConsentForm({ ...consentForm, text: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={() => createConsentMutation.mutate()}
+                        className="btn-primary text-xs py-1.5"
+                        disabled={createConsentMutation.isPending}
+                      >
+                        {createConsentMutation.isPending ? "Registrando..." : "Registrar consentimiento"}
+                      </button>
+                      <input
+                        className="input-field text-xs py-1.5 flex-1"
+                        placeholder="Motivo de revocación (opcional para el formulario)"
+                        value={consentForm.reason}
+                        onChange={(e) =>
+                          setConsentForm({ ...consentForm, reason: e.target.value })
+                        }
+                      />
+                    </div>
+                    {consentFormError && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+                        <p className="text-red-600 text-xs">{consentFormError}</p>
+                      </div>
+                    )}
+                    {consentError && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+                        <p className="text-amber-700 text-xs">{consentError}</p>
+                      </div>
+                    )}
+                    {loadingConsents ? (
+                      <p className="text-xs text-slate-400 mb-3">Cargando consentimientos...</p>
+                    ) : consents.length === 0 ? (
+                      <p className="text-xs text-slate-400 mb-3">No hay consentimientos registrados.</p>
+                    ) : (
+                      <div className="space-y-2 mb-3 max-h-56 overflow-auto pr-1">
+                        {consents.map((consent) => (
+                          <div key={consent.id} className="bg-slate-50 rounded-lg px-3 py-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-slate-700 truncate">
+                                  {consent.type} · {consent.version}
+                                </p>
+                                <p className="text-xs text-slate-400">
+                                  {consent.method} · {new Date(consent.grantedAt).toLocaleString("es-CL")}
+                                </p>
+                                <p className="text-xs text-slate-400 truncate">
+                                  {consent.textHash}
+                                </p>
+                                {consent.revokedAt && (
+                                  <p className="text-xs text-red-500 mt-1">
+                                    Revocado: {new Date(consent.revokedAt).toLocaleString("es-CL")}
+                                  </p>
+                                )}
+                              </div>
+                              {!consent.revokedAt && (
+                                <button
+                                  onClick={() => {
+                                    if (confirm("¿Revocar este consentimiento?")) {
+                                      revokeConsentMutation.mutate(consent.id);
+                                    }
+                                  }}
+                                  className="text-xs text-red-600 hover:text-red-700 shrink-0"
+                                  disabled={revokeConsentMutation.isPending}
+                                >
+                                  Revocar
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-slate-100">
                     <p className="font-medium text-slate-700 text-sm mb-3">
                       Documentos legales
                     </p>
@@ -829,13 +1066,13 @@ export default function PatientsPage() {
                         onChange={(e) => setDocType(e.target.value)}
                         className="input-field text-xs py-1.5 flex-1"
                       >
+                        <option value="OTHER">Documento general / legal</option>
                         <option value="INFORMED_CONSENT">
                           Consentimiento informado
                         </option>
                         <option value="TELEMED_AGREEMENT">
                           Acuerdo telemedicina
                         </option>
-                        <option value="OTHER">Otro</option>
                       </select>
                       <input
                         ref={fileInputRef}

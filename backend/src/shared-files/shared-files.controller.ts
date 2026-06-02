@@ -19,11 +19,15 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SharedFilesService } from './shared-files.service';
 import { FileCategory } from '@prisma/client';
 import type { Response } from 'express'
+import { AuditService } from '../modules/audit/audit.service';
 
 @Controller('shared-files')
 @UseGuards(JwtAuthGuard)
 export class SharedFilesController {
-  constructor(private readonly sharedFilesService: SharedFilesService) {}
+  constructor(
+    private readonly sharedFilesService: SharedFilesService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get()
   findAll(
@@ -66,6 +70,15 @@ export class SharedFilesController {
 
     const file =
       await this.sharedFilesService.findOne(id);
+
+    await this.auditService.log({
+      userId: req.user.userId,
+      action: 'VIEW',
+      resource: 'SharedFile',
+      resourceId: id,
+      detail: `Descarga de archivo compartido ${file.name}`,
+      statusCode: 200,
+    }).catch(() => undefined);
 
     return res.download(
       file.path, 
@@ -120,14 +133,25 @@ export class SharedFilesController {
 
     file.originalname = sanitizedFileName;
 
-    return this.sharedFilesService.uploadFile(
+    const created = await this.sharedFilesService.uploadFile(
       file,
       req.user.userId,
     );
+
+    await this.auditService.log({
+      userId: req.user.userId,
+      action: 'CREATE',
+      resource: 'SharedFile',
+      resourceId: created.id,
+      detail: `Archivo compartido ${created.name} subido`,
+      statusCode: 201,
+    }).catch(() => undefined);
+
+    return created;
   }
 
   @Patch(':id')
-  updateFile(
+  async updateFile(
     @Param('id') id: string,
     @Body()
     dto: { 
@@ -138,23 +162,45 @@ export class SharedFilesController {
 
     @Req() req: any,
   ) {
-    return this.sharedFilesService.updateFile(
+    const updated = await this.sharedFilesService.updateFile(
       id,
       dto,
       req.user.userId,
       req.user.role,
     );
+
+    await this.auditService.log({
+      userId: req.user.userId,
+      action: 'UPDATE',
+      resource: 'SharedFile',
+      resourceId: id,
+      detail: `Archivo compartido ${id} actualizado`,
+      statusCode: 200,
+    }).catch(() => undefined);
+
+    return updated;
   }
 
   @Delete(':id')
-  deleteFile(
+  async deleteFile(
     @Param('id') id: string,
     @Req() req: any,
   ) {
-    return this.sharedFilesService.deleteFile(
+    const deleted = await this.sharedFilesService.deleteFile(
       id, 
       req.user.userId, 
       req.user.role
     );
+
+    await this.auditService.log({
+      userId: req.user.userId,
+      action: 'SOFT_DELETE',
+      resource: 'SharedFile',
+      resourceId: id,
+      detail: `Archivo compartido ${id} desactivado`,
+      statusCode: 200,
+    }).catch(() => undefined);
+
+    return deleted;
   }
 }

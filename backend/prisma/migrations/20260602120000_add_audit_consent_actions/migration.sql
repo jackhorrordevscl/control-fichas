@@ -1,0 +1,5 @@
+-- Extend audit action catalog with consent-specific and error states
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'CONSENT_CREATED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'CONSENT_REVOKED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'ACCESS_DENIED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'ERROR';
