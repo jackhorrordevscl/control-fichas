@@ -103,9 +103,36 @@ describe('DocumentsService', () => {
         'user-1',
         'THERAPIST',
         { path: '/tmp/file.pdf', originalname: 'file.pdf', mimetype: 'application/pdf', size: 123 } as Express.Multer.File,
-        'INFORMED_CONSENT',
+        'PATIENT_REPORT',
       ),
     ).rejects.toThrow('Los documentos clínicos requieren cifrado configurado antes de subirlos');
+  });
+
+  it('permite subir un consentimiento firmado sin cifrado configurado', async () => {
+    patientsServiceMock.findOne.mockResolvedValue({ id: 'patient-1' });
+    prismaMock.patientDocument.create.mockResolvedValue({ id: 'doc-consent' });
+
+    delete process.env.FILE_ENCRYPTION_KEY;
+    delete process.env.KMS_KEY_ID;
+
+    await expect(
+      service.uploadDocument(
+        'patient-1',
+        'user-1',
+        'THERAPIST',
+        { path: '/tmp/consent.pdf', originalname: 'consent.pdf', mimetype: 'application/pdf', size: 123 } as Express.Multer.File,
+        'INFORMED_CONSENT',
+      ),
+    ).resolves.toEqual({ id: 'doc-consent' });
+
+    expect(prismaMock.patientDocument.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'INFORMED_CONSENT',
+          encrypted: false,
+        }),
+      }),
+    );
   });
 
   it('rechaza tipos de documento inválidos', async () => {

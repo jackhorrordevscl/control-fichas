@@ -7,7 +7,7 @@ export const CUSTODY_POLICY = {
 
 export function getCustodyFooterLines() {
   return [
-    'Documento generado por Umbral SpA — Confidencial',
+    'Documento Confidencial',
     `Ley 20.584 — Custodia obligatoria ${CUSTODY_POLICY.clinicalRecordRetentionYears} años`,
     `Respaldo operativo: ${CUSTODY_POLICY.operationalBackupRetentionDays} días`,
   ];

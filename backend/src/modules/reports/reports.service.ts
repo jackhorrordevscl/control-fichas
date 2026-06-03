@@ -46,7 +46,7 @@ export class ReportsService {
       doc
         .fontSize(20)
         .font('Helvetica-Bold')
-        .text('UMBRAL SpA', { align: 'center' });
+        .text('Gestión De Fichas Clínicas - Umbral', { align: 'center' });
 
       doc
         .fontSize(12)

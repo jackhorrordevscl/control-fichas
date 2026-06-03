@@ -56,6 +56,13 @@ interface ConsentRecord {
   reason?: string | null;
   grantedBy?: string | null;
   revokedBy?: string | null;
+  document?: {
+    id: string;
+    fileName: string;
+    type: string;
+    uploadedAt: string;
+    contentHash?: string | null;
+  } | null;
 }
 
 const emptyForm = {
@@ -111,8 +118,8 @@ export default function PatientsPage() {
   const [consentForm, setConsentForm] = useState({
     type: "INFORMED_CONSENT",
     version: "v1",
-    text: "",
     method: "IN_PERSON",
+    documentId: "",
     reason: "",
   });
   const [consentFormError, setConsentFormError] = useState("");
@@ -128,6 +135,7 @@ export default function PatientsPage() {
   const [history, setHistory] = useState<PatientHistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const deferredSearch = useDeferredValue(search.trim());
+  const consentDocumentSelected = consentForm.documentId.trim().length > 0;
 
   const { data: patients = [] } = useQuery({
     queryKey: ["patients", deferredSearch],
@@ -336,10 +344,10 @@ export default function PatientsPage() {
         type: consentForm.type,
         version: consentForm.version,
         method: consentForm.method,
+        documentId: consentForm.documentId,
         metadata: {
           source: "frontend",
           patientId: selected.id,
-          text: consentForm.text.trim(),
         },
       });
     },
@@ -933,23 +941,29 @@ export default function PatientsPage() {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-slate-600 mb-1">
-                          Texto legal del consentimiento
+                          Documento de respaldo
                         </label>
-                        <textarea
-                          className="input-field text-xs py-1.5 min-h-24"
-                          placeholder="Pega aquí el texto canónico del consentimiento; el hash se genera al registrar."
-                          value={consentForm.text}
+                        <select
+                          className="input-field text-xs py-1.5"
+                          value={consentForm.documentId}
                           onChange={(e) =>
-                            setConsentForm({ ...consentForm, text: e.target.value })
+                            setConsentForm({ ...consentForm, documentId: e.target.value })
                           }
-                        />
+                        >
+                          <option value="">Selecciona un PDF ya subido</option>
+                          {documents.map((doc: any) => (
+                            <option key={doc.id} value={doc.id}>
+                              {doc.fileName} · {doc.type}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                     <div className="flex gap-2 mb-3">
                       <button
                         onClick={() => createConsentMutation.mutate()}
                         className="btn-primary text-xs py-1.5"
-                        disabled={createConsentMutation.isPending}
+                        disabled={createConsentMutation.isPending || !consentDocumentSelected}
                       >
                         {createConsentMutation.isPending ? "Registrando..." : "Registrar consentimiento"}
                       </button>
@@ -962,6 +976,11 @@ export default function PatientsPage() {
                         }
                       />
                     </div>
+                    {!consentDocumentSelected && (
+                      <p className="text-xs text-amber-600 mb-3">
+                        Selecciona un PDF ya subido para habilitar el registro del consentimiento.
+                      </p>
+                    )}
                     {consentFormError && (
                       <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
                         <p className="text-red-600 text-xs">{consentFormError}</p>
@@ -991,6 +1010,11 @@ export default function PatientsPage() {
                                 <p className="text-xs text-slate-400 truncate">
                                   {consent.textHash}
                                 </p>
+                                {consent.document && (
+                                  <p className="text-xs text-slate-500 truncate mt-1">
+                                    PDF: {consent.document.fileName} · {consent.document.type}
+                                  </p>
+                                )}
                                 {consent.revokedAt && (
                                   <p className="text-xs text-red-500 mt-1">
                                     Revocado: {new Date(consent.revokedAt).toLocaleString("es-CL")}

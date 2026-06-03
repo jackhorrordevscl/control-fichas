@@ -10,7 +10,7 @@ describe('custody policy', () => {
 
   it('genera las líneas legales del pie de reporte', () => {
     expect(getCustodyFooterLines()).toEqual([
-      'Documento generado por Umbral SpA — Confidencial',
+      'Documento Confidencial',
       'Ley 20.584 — Custodia obligatoria 15 años',
       'Respaldo operativo: 30 días',
     ]);

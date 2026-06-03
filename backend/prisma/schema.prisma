@@ -74,6 +74,8 @@ model Consent {
   id        String      @id @default(uuid())
   patientId String
   patient   Patient     @relation(fields: [patientId], references: [id])
+  documentId String?
+  document  PatientDocument? @relation(fields: [documentId], references: [id])
   type      ConsentType
   version   String
   textHash  String? // hash or reference to the stored consent text/document
@@ -88,6 +90,7 @@ model Consent {
   createdAt DateTime @default(now())
 
   @@index([patientId])
+  @@index([documentId])
 }
 
 enum ConsentType {
@@ -135,6 +138,7 @@ model PatientDocument {
   patient        Patient       @relation(fields: [patientId], references: [id])
   consultationId String?
   consultation   Consultation? @relation(fields: [consultationId], references: [id])
+  consents       Consent[]
   type           DocumentType
   fileName       String
   storagePath    String

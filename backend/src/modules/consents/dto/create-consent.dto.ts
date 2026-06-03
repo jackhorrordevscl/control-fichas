@@ -8,12 +8,11 @@ export class CreateConsentDto {
   @IsString()
   version!: string;
 
-  @IsOptional()
-  @IsString()
-  textHash?: string;
-
   @IsString()
   method!: string;
+
+  @IsString()
+  documentId!: string;
 
   @IsOptional()
   @IsObject()

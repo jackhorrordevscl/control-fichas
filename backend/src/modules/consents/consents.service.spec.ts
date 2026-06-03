@@ -11,6 +11,9 @@ describe('ConsentsService', () => {
     patient: {
       findUnique: jest.fn(),
     },
+    patientDocument: {
+      findUnique: jest.fn(),
+    },
     consent: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -40,6 +43,12 @@ describe('ConsentsService', () => {
 
   it('registra un consentimiento y lo audita', async () => {
     prismaMock.patient.findUnique.mockResolvedValue({ id: 'patient-1' });
+    prismaMock.patientDocument.findUnique.mockResolvedValue({
+      id: 'doc-1',
+      patientId: 'patient-1',
+      contentHash: 'hash-123',
+      fileName: 'consentimiento.pdf',
+    });
     prismaMock.consent.findFirst.mockResolvedValue(null);
     prismaMock.consent.create.mockResolvedValue({ id: 'consent-1' });
 
@@ -48,8 +57,8 @@ describe('ConsentsService', () => {
       {
         type: 'INFORMED_CONSENT',
         version: 'v1',
-        textHash: 'hash-123',
         method: 'IN_PERSON',
+        documentId: 'doc-1',
         metadata: { source: 'frontdesk' },
       },
       'user-1',
@@ -62,6 +71,7 @@ describe('ConsentsService', () => {
         version: 'v1',
         textHash: 'hash-123',
         method: 'IN_PERSON',
+        documentId: 'doc-1',
         metadata: { source: 'frontdesk' },
         grantedBy: 'user-1',
       },
@@ -77,8 +87,14 @@ describe('ConsentsService', () => {
     expect(result).toEqual({ id: 'consent-1' });
   });
 
-  it('genera el hash cuando se envía el texto legal en metadata', async () => {
+  it('genera el hash desde el documento vinculado', async () => {
     prismaMock.patient.findUnique.mockResolvedValue({ id: 'patient-1' });
+    prismaMock.patientDocument.findUnique.mockResolvedValue({
+      id: 'doc-1',
+      patientId: 'patient-1',
+      contentHash: 'hash-from-document',
+      fileName: 'consentimiento.pdf',
+    });
     prismaMock.consent.findFirst.mockResolvedValue(null);
     prismaMock.consent.create.mockResolvedValue({ id: 'consent-2' });
 
@@ -88,7 +104,8 @@ describe('ConsentsService', () => {
         type: 'INFORMED_CONSENT',
         version: 'v2',
         method: 'ELECTRONIC',
-        metadata: { text: 'Texto legal de prueba' },
+        documentId: 'doc-1',
+        metadata: { source: 'frontend' },
       },
       'user-1',
     );
@@ -96,13 +113,14 @@ describe('ConsentsService', () => {
     expect(prismaMock.consent.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          textHash: expect.any(String),
+          documentId: 'doc-1',
+          textHash: 'hash-from-document',
         }),
       }),
     );
   });
 
-  it('rechaza consentimientos sin hash ni texto legal', async () => {
+  it('rechaza consentimientos sin documento de respaldo', async () => {
     prismaMock.patient.findUnique.mockResolvedValue({ id: 'patient-1' });
 
     await expect(
@@ -120,6 +138,12 @@ describe('ConsentsService', () => {
 
   it('bloquea consentimientos vigentes duplicados', async () => {
     prismaMock.patient.findUnique.mockResolvedValue({ id: 'patient-1' });
+    prismaMock.patientDocument.findUnique.mockResolvedValue({
+      id: 'doc-1',
+      patientId: 'patient-1',
+      contentHash: 'hash-123',
+      fileName: 'consentimiento.pdf',
+    });
     prismaMock.consent.findFirst.mockResolvedValue({ id: 'consent-1' });
 
     await expect(
@@ -128,8 +152,8 @@ describe('ConsentsService', () => {
         {
           type: 'INFORMED_CONSENT',
           version: 'v1',
-          textHash: 'hash-123',
           method: 'IN_PERSON',
+          documentId: 'doc-1',
         },
         'user-1',
       ),

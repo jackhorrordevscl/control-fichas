@@ -2,13 +2,12 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { createHash } from 'crypto';
 
 type ConsentInput = {
   type?: string;
   version?: string;
-  textHash?: string;
   method?: string;
+  documentId?: string;
   metadata?: unknown;
 };
 
@@ -23,7 +22,7 @@ export class ConsentsService {
     const type = dto.type?.trim();
     const version = dto.version?.trim();
     const method = dto.method?.trim();
-    const textHash = dto.textHash?.trim();
+    const documentId = dto.documentId?.trim();
 
     if (!type) {
       throw new BadRequestException('El tipo de consentimiento es obligatorio');
@@ -37,36 +36,37 @@ export class ConsentsService {
       throw new BadRequestException('El medio de consentimiento es obligatorio');
     }
 
+    if (!documentId) {
+      throw new BadRequestException('El documento de respaldo es obligatorio');
+    }
+
     if (dto.metadata !== undefined && dto.metadata !== null && typeof dto.metadata !== 'object') {
       throw new BadRequestException('Los metadatos del consentimiento deben ser un objeto JSON');
     }
 
-    return { type, version, method, textHash };
+    return { type, version, method, documentId };
   }
 
-  private extractConsentText(metadata: unknown) {
-    if (!metadata || typeof metadata !== 'object') {
-      return undefined;
+  private async resolveDocument(patientId: string, dto: ConsentInput) {
+    const document = await this.prisma.patientDocument.findUnique({
+      where: { id: dto.documentId!.trim() },
+      select: {
+        id: true,
+        patientId: true,
+        contentHash: true,
+        fileName: true,
+      },
+    });
+
+    if (!document || document.patientId !== patientId) {
+      throw new BadRequestException('El documento de respaldo no existe para este paciente');
     }
 
-    const candidate = (metadata as Record<string, unknown>).text ?? (metadata as Record<string, unknown>).consentText;
-    if (typeof candidate !== 'string') {
-      return undefined;
+    if (!document.contentHash) {
+      throw new BadRequestException('El documento de respaldo no tiene hash de integridad');
     }
 
-    return candidate.replace(/\r\n/g, '\n').trim();
-  }
-
-  private resolveTextHash(dto: ConsentInput, consentText?: string) {
-    if (dto.textHash?.trim()) {
-      return dto.textHash.trim();
-    }
-
-    if (consentText) {
-      return createHash('sha256').update(consentText).digest('hex');
-    }
-
-    throw new BadRequestException('Debes enviar el texto legal o su hash de referencia');
+    return document;
   }
 
   async create(patientId: string, dto: ConsentInput, recordedBy?: string | null) {
@@ -74,8 +74,8 @@ export class ConsentsService {
     if (!patient) throw new NotFoundException('Paciente no encontrado');
 
     const normalized = this.validateConsentInput(dto);
-    const consentText = this.extractConsentText(dto.metadata);
-    const textHash = this.resolveTextHash(dto, consentText);
+    const document = await this.resolveDocument(patientId, dto);
+    const textHash = document.contentHash;
 
     const activeConsent = await this.prisma.consent.findFirst({
       where: {
@@ -93,6 +93,7 @@ export class ConsentsService {
     const consent = await this.prisma.consent.create({
       data: {
         patientId,
+        documentId: document?.id,
         type: normalized.type as any,
         version: normalized.version,
         textHash,
@@ -115,7 +116,21 @@ export class ConsentsService {
   }
 
   async findAll(patientId: string) {
-    return this.prisma.consent.findMany({ where: { patientId }, orderBy: { grantedAt: 'desc' } });
+    return this.prisma.consent.findMany({
+      where: { patientId },
+      orderBy: { grantedAt: 'desc' },
+      include: {
+        document: {
+          select: {
+            id: true,
+            fileName: true,
+            type: true,
+            uploadedAt: true,
+            contentHash: true,
+          },
+        },
+      },
+    });
   }
 
   async revoke(patientId: string, consentId: string, revokedBy?: string | null, reason?: string | null) {

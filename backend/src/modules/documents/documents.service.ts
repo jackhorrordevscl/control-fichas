@@ -8,8 +8,6 @@ import { AuditService } from '../audit/audit.service';
 import { DocumentType, Prisma } from '@prisma/client';
 
 const CLINICAL_DOCUMENT_TYPES = new Set<DocumentType>([
-  DocumentType.INFORMED_CONSENT,
-  DocumentType.TELEMED_AGREEMENT,
   DocumentType.PATIENT_REPORT,
   DocumentType.CONSULTATION_ATTACHMENT,
 ]);
