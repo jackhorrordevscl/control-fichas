@@ -1,5 +1,5 @@
 import { ConsentType } from '@prisma/client';
-import { IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsString } from 'class-validator';
 
 export class CreateConsentDto {
   @IsEnum(ConsentType)
@@ -13,8 +13,4 @@ export class CreateConsentDto {
 
   @IsString()
   documentId!: string;
-
-  @IsOptional()
-  @IsObject()
-  metadata?: Record<string, unknown>;
 }

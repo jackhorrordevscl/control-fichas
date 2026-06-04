@@ -345,10 +345,6 @@ export default function PatientsPage() {
         version: consentForm.version,
         method: consentForm.method,
         documentId: consentForm.documentId,
-        metadata: {
-          source: "frontend",
-          patientId: selected.id,
-        },
       });
     },
     onSuccess: async () => {

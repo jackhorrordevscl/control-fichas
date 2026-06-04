@@ -1,61 +1,173 @@
+import { CanActivate, ExecutionContext, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { DocumentsService } from '../src/modules/documents/documents.service';
+import request from 'supertest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { DocumentsController } from '../src/modules/documents/documents.controller';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DocumentsService } from '../src/modules/documents/documents.service';
+import { JwtAuthGuard } from '../src/common/guards/jwt-auth.guard';
 import { PatientsService } from '../src/modules/patients/patients.service';
-import * as fs from 'fs';
 
-describe('Documents E2E (mocked Prisma/S3)', () => {
-  let service: DocumentsService;
-  let controller: DocumentsController;
+describe('Documents controller (e2e)', () => {
+  let app: INestApplication;
 
-  const prismaMock = {
-    patientDocument: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
-  } as any;
+  const currentUser = {
+    userId: 'user-1',
+    email: 'therapist@umbral.cl',
+    role: 'THERAPIST',
+    name: 'Terapeuta Test',
+  };
 
-  const patientsServiceMock = { findOne: jest.fn() } as any;
+  const documentsServiceMock = {
+    uploadDocument: jest.fn(),
+    auditDocumentUpload: jest.fn(),
+    findByPatient: jest.fn(),
+    getDocument: jest.fn(),
+    auditDocumentDownload: jest.fn(),
+  };
+
+  const patientsServiceMock = {
+    findOne: jest.fn(),
+  };
+
+  const jwtGuardMock: CanActivate = {
+    canActivate(context: ExecutionContext) {
+      const requestObject = context.switchToHttp().getRequest();
+      requestObject.user = currentUser;
+      requestObject.correlationId = 'corr-docs-1';
+      return true;
+    },
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    // create a real temp file for upload
-    const os = require('os');
-    const tmpPath = require('path').join(os.tmpdir(), `test-upload-${Date.now()}.pdf`);
-    fs.writeFileSync(tmpPath, 'hello');
-    (global as any).__TEST_TMP_FILE__ = tmpPath;
 
-    const module: TestingModule = await Test.createTestingModule({
+    const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [DocumentsController],
       providers: [
-        DocumentsService,
-        { provide: PrismaService, useValue: prismaMock },
+        { provide: DocumentsService, useValue: documentsServiceMock },
         { provide: PatientsService, useValue: patientsServiceMock },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue(jwtGuardMock)
+      .compile();
 
-    service = module.get<DocumentsService>(DocumentsService);
-    controller = module.get<DocumentsController>(DocumentsController);
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api/v1');
+    app.useGlobalPipes(
+      new (require('@nestjs/common').ValidationPipe)({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+    await app.init();
   });
 
-  it('upload guarda metadata cifrada cuando FILE_ENCRYPTION_KEY está presente', async () => {
-    process.env.FILE_ENCRYPTION_KEY = Buffer.from('1'.repeat(32)).toString('base64');
-    patientsServiceMock.findOne.mockResolvedValue({ id: 'p1' });
-    prismaMock.patientDocument.create.mockResolvedValue({ id: 'doc-1' });
-
-    const file = { path: (global as any).__TEST_TMP_FILE__, originalname: 'test.pdf', mimetype: 'application/pdf' } as Express.Multer.File;
-
-    const result = await service.uploadDocument('p1', 'user-1', 'THERAPIST', file, 'INFORMED_CONSENT');
-
-    expect(prismaMock.patientDocument.create).toHaveBeenCalled();
-    const data = prismaMock.patientDocument.create.mock.calls[0][0].data;
-    expect(data.encrypted).toBe(true);
-    expect(data.encDataKey).toBeDefined();
+  afterEach(async () => {
+    await app.close();
   });
 
-  it('findByPatient lista documentos tras validar acceso', async () => {
-    patientsServiceMock.findOne.mockResolvedValue({ id: 'p1' });
-    prismaMock.patientDocument.findMany.mockResolvedValue([{ id: 'doc-1' }]);
+  it('sube un PDF de respaldo y audita la carga', async () => {
+    const tmpPath = path.join(os.tmpdir(), `document-test-${Date.now()}.pdf`);
+    fs.writeFileSync(tmpPath, 'pdf-content');
 
-    const docs = await service.findByPatient('p1', 'user-1', 'THERAPIST');
-    expect(docs).toEqual([{ id: 'doc-1' }]);
+    documentsServiceMock.uploadDocument.mockResolvedValue({
+      id: 'doc-1',
+      patientId: 'patient-1',
+      type: 'INFORMED_CONSENT',
+      fileName: 'consentimiento.pdf',
+      storagePath: '/uploads/documents/doc-1.pdf',
+    });
+    documentsServiceMock.auditDocumentUpload.mockResolvedValue(undefined);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/documents/upload')
+      .field('patientId', 'patient-1')
+      .field('type', 'INFORMED_CONSENT')
+      .attach('file', tmpPath)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: 'doc-1',
+          patientId: 'patient-1',
+          type: 'INFORMED_CONSENT',
+          fileName: 'consentimiento.pdf',
+        });
+      });
+
+    expect(documentsServiceMock.uploadDocument).toHaveBeenCalledWith(
+      'patient-1',
+      'user-1',
+      'THERAPIST',
+      expect.objectContaining({
+        originalname: expect.stringContaining('document-test-'),
+      }),
+      'INFORMED_CONSENT',
+    );
+    expect(documentsServiceMock.auditDocumentUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'doc-1' }),
+      'user-1',
+    );
+  });
+
+  it('lista documentos del paciente autenticado', async () => {
+    documentsServiceMock.findByPatient.mockResolvedValue([
+      {
+        id: 'doc-1',
+        patientId: 'patient-1',
+        type: 'INFORMED_CONSENT',
+        fileName: 'consentimiento.pdf',
+      },
+    ]);
+
+    await request(app.getHttpServer())
+      .get('/api/v1/documents/patient/patient-1')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toHaveLength(1);
+        expect(body[0]).toMatchObject({
+          id: 'doc-1',
+          fileName: 'consentimiento.pdf',
+          type: 'INFORMED_CONSENT',
+        });
+      });
+
+    expect(documentsServiceMock.findByPatient).toHaveBeenCalledWith(
+      'patient-1',
+      'user-1',
+      'THERAPIST',
+    );
+  });
+
+  it('descarga un documento con validación de acceso y auditoría', async () => {
+    const tmpPath = `tmp-document-download-${Date.now()}.pdf`;
+    fs.writeFileSync(tmpPath, 'download-content');
+
+    documentsServiceMock.getDocument.mockResolvedValue({
+      id: 'doc-1',
+      patientId: 'patient-1',
+      fileName: 'consentimiento.pdf',
+      storagePath: tmpPath,
+      encrypted: false,
+    });
+    documentsServiceMock.auditDocumentDownload.mockResolvedValue(undefined);
+
+    await request(app.getHttpServer())
+      .get('/api/v1/documents/doc-1/download')
+      .expect(200)
+      .expect('Content-Disposition', /attachment/);
+
+    expect(documentsServiceMock.getDocument).toHaveBeenCalledWith(
+      'doc-1',
+      'user-1',
+      'THERAPIST',
+    );
+    expect(documentsServiceMock.auditDocumentDownload).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'doc-1' }),
+      'user-1',
+    );
   });
 });

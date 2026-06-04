@@ -1,5 +1,4 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -8,7 +7,6 @@ type ConsentInput = {
   version?: string;
   method?: string;
   documentId?: string;
-  metadata?: unknown;
 };
 
 @Injectable()
@@ -38,10 +36,6 @@ export class ConsentsService {
 
     if (!documentId) {
       throw new BadRequestException('El documento de respaldo es obligatorio');
-    }
-
-    if (dto.metadata !== undefined && dto.metadata !== null && typeof dto.metadata !== 'object') {
-      throw new BadRequestException('Los metadatos del consentimiento deben ser un objeto JSON');
     }
 
     return { type, version, method, documentId };
@@ -98,7 +92,6 @@ export class ConsentsService {
         version: normalized.version,
         textHash,
         method: normalized.method,
-        metadata: dto.metadata === undefined ? undefined : (dto.metadata as Prisma.InputJsonValue),
         grantedBy: recordedBy ?? undefined,
       },
     });

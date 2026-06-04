@@ -59,7 +59,6 @@ describe('ConsentsService', () => {
         version: 'v1',
         method: 'IN_PERSON',
         documentId: 'doc-1',
-        metadata: { source: 'frontdesk' },
       },
       'user-1',
     );
@@ -72,7 +71,6 @@ describe('ConsentsService', () => {
         textHash: 'hash-123',
         method: 'IN_PERSON',
         documentId: 'doc-1',
-        metadata: { source: 'frontdesk' },
         grantedBy: 'user-1',
       },
     });
@@ -105,7 +103,6 @@ describe('ConsentsService', () => {
         version: 'v2',
         method: 'ELECTRONIC',
         documentId: 'doc-1',
-        metadata: { source: 'frontend' },
       },
       'user-1',
     );

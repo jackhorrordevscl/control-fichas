@@ -1,55 +1,203 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, CanActivate, ExecutionContext } from '@nestjs/common';
+import request from 'supertest';
+import { ConsentsController } from '../src/modules/consents/consents.controller';
 import { ConsentsService } from '../src/modules/consents/consents.service';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { NotFoundException } from '@nestjs/common';
+import { JwtAuthGuard } from '../src/common/guards/jwt-auth.guard';
 
-describe('Consents E2E (mocked Prisma)', () => {
-  let service: ConsentsService;
+describe('Consents controller (e2e)', () => {
+  let app: INestApplication;
 
-  const prismaMock = {
-    patient: { findUnique: jest.fn() },
-    consent: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
-  } as any;
+  const currentUser = {
+    userId: 'user-1',
+    email: 'therapist@umbral.cl',
+    role: 'THERAPIST',
+    name: 'Terapeuta Test',
+  };
+
+  const consentsServiceMock = {
+    create: jest.fn(),
+    findAll: jest.fn(),
+    revoke: jest.fn(),
+  };
+
+  const jwtGuardMock: CanActivate = {
+    canActivate(context: ExecutionContext) {
+      const requestObject = context.switchToHttp().getRequest();
+      requestObject.user = currentUser;
+      requestObject.correlationId = 'corr-test-1';
+      return true;
+    },
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    const module: TestingModule = await Test.createTestingModule({
+    const moduleBuilder = Test.createTestingModule({
+      controllers: [ConsentsController],
       providers: [
-        ConsentsService,
-        { provide: PrismaService, useValue: prismaMock },
+        { provide: ConsentsService, useValue: consentsServiceMock },
       ],
-    }).compile();
+    }).overrideGuard(JwtAuthGuard).useValue(jwtGuardMock);
 
-    service = module.get<ConsentsService>(ConsentsService);
+    const moduleFixture: TestingModule = await moduleBuilder.compile();
+
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api/v1');
+    app.useGlobalPipes(
+      new (require('@nestjs/common').ValidationPipe)({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+    await app.init();
   });
 
-  it('crea un consentimiento si el paciente existe', async () => {
-    prismaMock.patient.findUnique.mockResolvedValue({ id: 'p1' });
-    prismaMock.consent.create.mockResolvedValue({ id: 'c1', patientId: 'p1' });
-
-    const dto = { type: 'INFORMED_CONSENT', version: 'v1' };
-    const created = await service.create('p1', dto, 'user-1');
-
-    expect(prismaMock.patient.findUnique).toHaveBeenCalledWith({ where: { id: 'p1' } });
-    expect(prismaMock.consent.create).toHaveBeenCalled();
-    expect(created).toEqual({ id: 'c1', patientId: 'p1' });
+  afterEach(async () => {
+    await app.close();
   });
 
-  it('lanza NotFound si el paciente no existe', async () => {
-    prismaMock.patient.findUnique.mockResolvedValue(null);
+  it('registra un consentimiento con documentId y lo devuelve al cliente', async () => {
+    consentsServiceMock.create.mockResolvedValue({
+      id: 'consent-1',
+      patientId: 'patient-1',
+      documentId: 'doc-1',
+      type: 'INFORMED_CONSENT',
+      version: 'v1',
+      method: 'IN_PERSON',
+      textHash: 'hash-from-document',
+    });
 
-    await expect(service.create('nope', { type: 'OTHER' }, 'user-1')).rejects.toThrow(NotFoundException);
+    await request(app.getHttpServer())
+      .post('/api/v1/patients/patient-1/consents')
+      .send({
+        type: 'INFORMED_CONSENT',
+        version: 'v1',
+        method: 'IN_PERSON',
+        documentId: 'doc-1',
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          id: 'consent-1',
+          patientId: 'patient-1',
+          documentId: 'doc-1',
+          type: 'INFORMED_CONSENT',
+          version: 'v1',
+          method: 'IN_PERSON',
+          textHash: 'hash-from-document',
+        });
+      });
+
+    expect(consentsServiceMock.create).toHaveBeenCalledWith(
+      'patient-1',
+      {
+        type: 'INFORMED_CONSENT',
+        version: 'v1',
+        method: 'IN_PERSON',
+        documentId: 'doc-1',
+      },
+      'user-1',
+    );
   });
 
-  it('revoca un consentimiento existente', async () => {
-    prismaMock.consent.findUnique.mockResolvedValue({ id: 'c1', patientId: 'p1' });
-    prismaMock.consent.update.mockResolvedValue({ id: 'c1', revokedAt: new Date() });
+  it('rechaza crear un consentimiento sin documentId', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/patients/patient-1/consents')
+      .send({
+        type: 'INFORMED_CONSENT',
+        version: 'v1',
+        method: 'IN_PERSON',
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toEqual(expect.arrayContaining([expect.stringContaining('documentId')]));
+      });
+  });
 
-    const updated = await service.revoke('p1', 'c1', 'user-2', 'reason');
+  it('rechaza metadata adicional en la creación de consentimiento', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/patients/patient-1/consents')
+      .send({
+        type: 'INFORMED_CONSENT',
+        version: 'v1',
+        method: 'IN_PERSON',
+        documentId: 'doc-1',
+        metadata: { source: 'frontend' },
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toEqual(
+          expect.arrayContaining([expect.stringContaining('metadata')]),
+        );
+      });
 
-    expect(prismaMock.consent.findUnique).toHaveBeenCalledWith({ where: { id: 'c1' } });
-    expect(prismaMock.consent.update).toHaveBeenCalled();
-    expect(updated).toHaveProperty('id', 'c1');
+    expect(consentsServiceMock.create).not.toHaveBeenCalled();
+  });
+
+  it('lista consentimientos para el paciente autenticado', async () => {
+    consentsServiceMock.findAll.mockResolvedValue([
+      {
+        id: 'consent-1',
+        patientId: 'patient-1',
+        documentId: 'doc-1',
+        type: 'INFORMED_CONSENT',
+        version: 'v1',
+        method: 'IN_PERSON',
+        textHash: 'hash-from-document',
+        document: {
+          id: 'doc-1',
+          fileName: 'consentimiento.pdf',
+          type: 'INFORMED_CONSENT',
+          uploadedAt: new Date('2026-06-03T10:00:00.000Z'),
+          contentHash: 'hash-from-document',
+        },
+      },
+    ]);
+
+    await request(app.getHttpServer())
+      .get('/api/v1/patients/patient-1/consents')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toHaveLength(1);
+        expect(body[0]).toMatchObject({
+          id: 'consent-1',
+          documentId: 'doc-1',
+          document: {
+            fileName: 'consentimiento.pdf',
+            type: 'INFORMED_CONSENT',
+            contentHash: 'hash-from-document',
+          },
+        });
+      });
+
+    expect(consentsServiceMock.findAll).toHaveBeenCalledWith('patient-1');
+  });
+
+  it('revoca un consentimiento con motivo', async () => {
+    consentsServiceMock.revoke.mockResolvedValue({
+      id: 'consent-1',
+      revokedAt: new Date('2026-06-03T10:05:00.000Z'),
+      reason: 'Revocación solicitada por el paciente',
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/patients/patient-1/consents/consent-1/revoke')
+      .send({ reason: 'Revocación solicitada por el paciente' })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: 'consent-1',
+          reason: 'Revocación solicitada por el paciente',
+        });
+      });
+
+    expect(consentsServiceMock.revoke).toHaveBeenCalledWith(
+      'patient-1',
+      'consent-1',
+      'user-1',
+      'Revocación solicitada por el paciente',
+    );
   });
 });

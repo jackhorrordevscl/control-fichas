@@ -86,11 +86,25 @@ Cada control debe quedar validado en:
 
 ## 4. Plan por Frentes
 
+## Estado de avance 2026-06-03
+
+El **Frente A. Consentimiento jurídicamente trazable** quedó completado en el workspace con evidencia técnica y pruebas e2e:
+
+- `documentId` obligatorio en la creación de consentimiento;
+- hash derivado desde el PDF de respaldo;
+- rechazo de `metadata` adicional;
+- UI que sólo habilita el registro cuando hay documento seleccionado;
+- prueba e2e HTTP del flujo de alta, listado y revocación.
+
+Por tanto, el próximo trabajo natural se concentra en los frentes B, C y D.
+
 ## Frente A. Consentimiento jurídicamente trazable
 
 ### Objetivo
 
 Reemplazar el modelo basado sólo en flags booleanas por un sistema de consentimiento defendible en auditoría.
+
+**Estado actual:** completado en el workspace.
 
 ### Cambios propuestos
 
@@ -127,6 +141,10 @@ Reemplazar el modelo basado sólo en flags booleanas por un sistema de consentim
 
 ## Frente B. Protección fuerte de documentos clínicos
 
+### Estado actual 2026-06-03
+
+El frente ya tiene evidencia HTTP real de subida multipart, listado por paciente y descarga controlada en [documents.e2e-spec.ts](../backend/test/documents.e2e-spec.ts), además de pruebas del cifrado envelope local en [encryption.spec.ts](../backend/src/modules/documents/encryption.spec.ts) y auditoría de carga y descarga en el código.
+
 ### Objetivo
 
 Acreditar que los documentos clínicos no dependen sólo de rutas de disco y permisos lógicos, sino de protección fuerte en reposo y en acceso.
@@ -161,6 +179,10 @@ Acreditar que los documentos clínicos no dependen sólo de rutas de disco y per
 
 ## Frente C. Protección fuerte de respaldos y recuperación
 
+### Estado actual 2026-06-03
+
+El verificador de backups quedó acreditado con prueba e2e en [verify-backup.e2e-spec.ts](../backend/test/verify-backup.e2e-spec.ts), incluyendo caso exitoso y caso corrupto.
+
 ### Objetivo
 
 Hacer que backup y restauración sean defendibles para datos sensibles de salud.
@@ -188,6 +210,10 @@ Hacer que backup y restauración sean defendibles para datos sensibles de salud.
 ---
 
 ## Frente D. Derechos del titular de datos
+
+### Estado actual 2026-06-03
+
+El módulo de solicitudes del titular quedó respaldado con validación de DTO y e2e HTTP real en [data-subject-requests.e2e-spec.ts](../backend/test/data-subject-requests.e2e-spec.ts): alta, listado y resolución.
 
 ### Objetivo
 

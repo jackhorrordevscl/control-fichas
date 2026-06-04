@@ -1,0 +1,23 @@
+{
+    "Role": {
+        "Path": "/",
+        "RoleName": "umbral-kms-admins",
+        "RoleId": "AROAXLPZFGGTPTJLN4PEP",
+        "Arn": "arn:aws:iam::505718059430:role/umbral-kms-admins",
+        "CreateDate": "2026-06-03T08:49:32+00:00",
+        "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "AWS": "arn:aws:iam::505718059430:root"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        },
+        "MaxSessionDuration": 3600,
+        "RoleLastUsed": {}
+    }
+}

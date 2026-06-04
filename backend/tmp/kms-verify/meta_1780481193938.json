@@ -1,0 +1,43 @@
+{
+  "ciphertext": {
+    "type": "Buffer",
+    "data": [
+      80,
+      92,
+      92,
+      158,
+      140,
+      118,
+      201,
+      106,
+      145,
+      143,
+      71,
+      111,
+      32,
+      205,
+      110,
+      149,
+      183,
+      97,
+      60,
+      225,
+      152,
+      128,
+      195,
+      134,
+      140,
+      116,
+      236,
+      112,
+      152,
+      33
+    ]
+  },
+  "iv": "ef7LPJyChr0gpM8N",
+  "tag": "K+czwvb6JFCr4a5ETZNbtQ==",
+  "encDataKey": "AQIDAHi6khJZDQctEQo3UOkHS7qJGDRE071gAa5YcCH9POnvaAFSMJUczIkN8L6apPi6KK6LAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMr3om7b2WL7YSNqtDAgEQgDtLLB+TcJ6pgHQhkqY6GYCEa/nsb9C8wD6EwMEG7V0rQ10rOqZKEMO887BiygKuePvWdLQsyvUOE5l97Q==",
+  "encDataKeyIv": null,
+  "encDataKeyTag": null,
+  "keyProvider": "kms"
+}

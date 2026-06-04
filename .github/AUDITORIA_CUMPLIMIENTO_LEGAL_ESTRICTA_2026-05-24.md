@@ -10,6 +10,21 @@
 
 ## 1. Dictamen Ejecutivo
 
+## Addendum de avance 2026-06-03
+
+Desde la última versión de esta auditoría, el frente de consentimiento jurídicamente trazable quedó implementado y validado localmente en el workspace:
+
+- el consentimiento ya exige `documentId` explícito;
+- el hash de evidencia se deriva del PDF subido;
+- la API rechaza `metadata` adicional en la creación;
+- la UI sólo habilita el registro si existe un documento seleccionado;
+- existe prueba e2e HTTP del flujo de registro, listado y revocación.
+
+Además, se sumaron pruebas e2e HTTP del flujo de solicitudes del titular, de la subida/listado/descarga de documentos, del verificador de backups con checksum y manifest, de archivos compartidos y del módulo de cifrado envelope de documentos.
+También quedó cubierta la superficie de archivos compartidos con subida, listado y descarga HTTP real.
+
+Este avance corrige la brecha descrita en el hallazgo 3.1, pero no modifica la conclusión global: el cumplimiento legal estricto integral sigue siendo parcial por los frentes de documentos, respaldos, derechos del titular y custodia técnica.
+
 El repositorio **no acredita cumplimiento estricto integral** con las exigencias legales aplicables al tratamiento de ficha clínica y datos personales sensibles de salud.
 
 ### Conclusión general
@@ -37,7 +52,9 @@ Los siguientes controles sí constan en el repositorio y mejoran materialmente e
 5. **Consentimiento funcional exigido para registrar consultas**, visible en [consultations.service.ts](../backend/src/modules/consultations/consultations.service.ts#L32-L61).
 6. **Neutralización de la consulta pública por RUT**, visible en [patients.service.ts](../backend/src/modules/patients/patients.service.ts#L214-L239).
 7. **Soft delete y trazabilidad de cambios en pacientes**, visible en [patients.service.ts](../backend/src/modules/patients/patients.service.ts#L140-L208).
-8. **Validación ejecutable actual limpia:** Prisma al día, backend compilando, 26 pruebas unitarias verdes, 4 e2e verdes y frontend compilando correctamente.
+8. **Validación ejecutable actual limpia:** Prisma al día, backend compilando, pruebas unitarias verdes, e2e ampliadas y frontend compilando correctamente.
+10. **Archivos compartidos con cobertura HTTP:** el controlador de `shared-files` cuenta con e2e de subida, listado y descarga, incluyendo auditoría de creación y visualización.
+9. **Consentimiento trazable endurecido:** el consentimiento queda vinculado a `PatientDocument` por `documentId`, deriva `textHash` desde el PDF subido, rechaza `metadata` adicional y cuenta con e2e HTTP de registro/listado/revocación.
 
 Estas mejoras son sustantivas, pero no bastan por sí solas para sostener una declaración de cumplimiento legal estricto.
 
@@ -48,6 +65,8 @@ Estas mejoras son sustantivas, pero no bastan por sí solas para sostener una de
 ## Críticos
 
 ### 3.1. El modelo de consentimiento no entrega evidencia jurídica ni trazabilidad suficiente
+
+- **Estado actualizado 2026-06-03:** esta brecha quedó remediada en el workspace. El consentimiento ya no depende de un booleano ni de texto libre; ahora exige `documentId`, deriva evidencia desde el PDF asociado y queda visible en la ficha.
 
 - **Riesgo:** crítico
 - **Impacto:** el sistema no demuestra con suficiente solidez cuándo, cómo, bajo qué texto/versionado y con qué revocación se obtuvo el consentimiento para tratamiento de datos sensibles y atenciones específicas.
@@ -212,7 +231,7 @@ El informe técnico es válido como cierre de remediación técnica del roadmap 
 | Frente | Estado | Evidencia positiva | Brecha principal |
 | --- | --- | --- | --- |
 | Confidencialidad de ficha clínica | Parcial | Control de acceso por paciente y rol | Resguardo documental y de backup no acreditado estrictamente |
-| Consentimiento informado | Parcial | Exigencia funcional para consultas y telemedicina | No hay consentimiento versionado, firmado, revocable y jurídicamente trazable |
+| Consentimiento informado | Alto / acreditado en workspace | Exigencia funcional para consultas y telemedicina | Queda pendiente llevar esta evidencia al cierre normativo global y mantener el enforcement en producción |
 | Trazabilidad de accesos y cambios | Parcial alto | Auditoría enriquecida, historial de cambios, versionado | Falta exhaustividad estricta en ciertos eventos y accountability completo |
 | Custodia de ficha clínica | Parcial | Soft delete e historial, pie legal en PDF | No hay política técnica verificable de retención/custodia integral |
 | Minimización de exposición pública | Alto | Endpoint público por RUT neutralizado | Correcto en este frente |

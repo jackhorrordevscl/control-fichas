@@ -48,6 +48,8 @@ ADMIN_NAME="Administrador Umbral"
 - `AuditLog` es append-only a nivel de PostgreSQL.
 - Las correcciones de consultas crean una nueva versión vigente y no sobreescriben el registro original.
 - Toda consulta requiere consentimiento informado firmado; `TELEMED` además exige consentimiento de telemedicina.
+- El consentimiento registrado en `/patients/:patientId/consents` exige `documentId` explícito, deriva `textHash` desde el PDF subido y rechaza campos adicionales como `metadata`.
+- Los consentimientos firmados deben subirse como documento legal en `/documents/upload` y luego seleccionarse desde la ficha del paciente.
 
 ## Despliegue seguro de migraciones
 
