@@ -4,6 +4,8 @@ Este documento recoge instrucciones operativas y políticas mínimas para las co
 
 Última actualización: 2026-05-30
 
+Nota: las políticas y runbooks descritos en este archivo resumen las medidas implementadas y los procedimientos recomendados dentro del *workspace*. Su aplicación en entornos de producción requiere validación operativa adicional (integración con KMS/secret managers, verificación de migraciones aplicadas en despliegues, comprobación de backup cifrado y pruebas de descarga/descifrado en los entornos reales). Estas validaciones son imprescindibles para cualquier afirmación de cumplimiento legal estricto.
+
 ---
 
 ## Resumen de cambios aplicados

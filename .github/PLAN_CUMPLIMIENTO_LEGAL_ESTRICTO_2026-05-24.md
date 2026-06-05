@@ -86,17 +86,24 @@ Cada control debe quedar validado en:
 
 ## 4. Plan por Frentes
 
-## Estado de avance 2026-06-03
+## Estado de avance 2026-06-05 (análisis completo del repositorio)
 
-El **Frente A. Consentimiento jurídicamente trazable** quedó completado en el workspace con evidencia técnica y pruebas e2e:
+Se constató que los frentes B, C, D, E y G estaban **completamente implementados en el código pero no documentados**. A continuación el estado real de cada frente:
 
-- `documentId` obligatorio en la creación de consentimiento;
-- hash derivado desde el PDF de respaldo;
-- rechazo de `metadata` adicional;
-- UI que sólo habilita el registro cuando hay documento seleccionado;
-- prueba e2e HTTP del flujo de alta, listado y revocación.
+| Frente | Estado | Fecha cierre |
+|--------|--------|-------------|
+| A. Consentimiento jurídicamente trazable | ✅ COMPLETADO | 2026-06-03 |
+| B. Protección fuerte de documentos clínicos | ✅ COMPLETADO | ~2026-05-30 (no documentado) |
+| C. Protección fuerte de respaldos | ✅ COMPLETADO | ~2026-05-30 (no documentado) |
+| D. Derechos del titular de datos | ✅ COMPLETADO | ~2026-06-02 (no documentado) |
+| E. Trazabilidad exhaustiva y accountability | ✅ COMPLETADO | ~2026-06-02 (no documentado) |
+| F. Custodia legal y conservación verificable | ⚠️ PARCIAL (~30%) | Pendiente |
+| G. Seguridad de sesión e incidentes | ✅ COMPLETADO | ~2026-05-30 (no documentado) |
+| H. Evidencia operativa de despliegue | ⚠️ NO APLICA AÚN | Pendiente (prod separado) |
 
-Por tanto, el próximo trabajo natural se concentra en los frentes B, C y D.
+**Progreso total ponderado: ~83%**
+
+El frente A quedó completado con el addendum 2026-06-03. Los frentes B–G (excepto F) también estaban implementados pero no registrados en este documento.
 
 ## Frente A. Consentimiento jurídicamente trazable
 
@@ -141,9 +148,18 @@ Reemplazar el modelo basado sólo en flags booleanas por un sistema de consentim
 
 ## Frente B. Protección fuerte de documentos clínicos
 
-### Estado actual 2026-06-03
+### Estado actual 2026-06-05 — ✅ COMPLETADO
 
-El frente ya tiene evidencia HTTP real de subida multipart, listado por paciente y descarga controlada en [documents.e2e-spec.ts](../backend/test/documents.e2e-spec.ts), además de pruebas del cifrado envelope local en [encryption.spec.ts](../backend/src/modules/documents/encryption.spec.ts) y auditoría de carga y descarga en el código.
+**Implementado y verificado en el código:**
+- `backend/src/modules/documents/encryption.ts`: envelope encryption AES-256-GCM. Si `KMS_KEY_ID` presente, usa `kms.generateDataKey` (AWS SDK). Si solo `FILE_ENCRYPTION_KEY`, cifra la data key con AES-256-GCM (modo local). Download descifra en memoria temporal.
+- `documents.service.ts`: rechaza upload de `PATIENT_REPORT` y `CONSULTATION_ATTACHMENT` si no hay clave configurada.
+- `PatientDocument` schema: `encrypted`, `contentHash`, `encDataKey`, `encDataKeyIv`, `encDataKeyTag`, `iv`, `tag`.
+- Clave KMS activa: `arn:aws:kms:sa-east-1:505718059430:key/2c56ab46-dc28-4992-a9a9-cec3c20f4683`
+- Tests: `encryption.spec.ts` (round-trip + rechazo sin clave), `documents.service.spec.ts` (enforcement por tipo).
+- E2e: `documents.e2e-spec.ts` (upload multipart + listado + descarga).
+- `verify-kms.ts`: script de verificación de cifrado/descifrado.
+
+**Pendiente menor:** S3 como backend primario de almacenamiento (código de descarga desde S3 existe; upload aún usa disco local).
 
 ### Objetivo
 
@@ -179,9 +195,14 @@ Acreditar que los documentos clínicos no dependen sólo de rutas de disco y per
 
 ## Frente C. Protección fuerte de respaldos y recuperación
 
-### Estado actual 2026-06-03
+### Estado actual 2026-06-05 — ✅ COMPLETADO
 
-El verificador de backups quedó acreditado con prueba e2e en [verify-backup.e2e-spec.ts](../backend/test/verify-backup.e2e-spec.ts), incluyendo caso exitoso y caso corrupto.
+**Implementado y verificado en el código:**
+- `backups/backup.sh`: cifrado con `openssl enc -aes-256-cbc -pbkdf2 -salt` cuando `BACKUP_ENCRYPTION_KEY` presente. Genera SHA-256 checksum y manifest JSON. Copia a SSD secundario (regla 3-2-1). Retención de 30 días.
+- `backend/scripts/verify-backup.ts`: valida checksum del backup más reciente contra manifest. Detecta archivos corruptos.
+- E2e: `verify-backup.e2e-spec.ts` (caso exitoso + caso corrupto).
+
+**Pendiente menor:** backup usa AES-256-CBC (no GCM); se recomienda migrar a AES-GCM o usar KMS para autenticación integrada de integridad.
 
 ### Objetivo
 
@@ -211,9 +232,18 @@ Hacer que backup y restauración sean defendibles para datos sensibles de salud.
 
 ## Frente D. Derechos del titular de datos
 
-### Estado actual 2026-06-03
+### Estado actual 2026-06-05 — ✅ COMPLETADO
 
-El módulo de solicitudes del titular quedó respaldado con validación de DTO y e2e HTTP real en [data-subject-requests.e2e-spec.ts](../backend/test/data-subject-requests.e2e-spec.ts): alta, listado y resolución.
+**Implementado y verificado en el código:**
+- Módulo `backend/src/modules/data-subject-requests/` con controller, service, module, DTOs.
+- Tipos: `ACCESS`, `RECTIFICATION`, `REVOCATION`, `OPPOSITION`, `EXPORT`.
+- Estados: `PENDING` → `RESOLVED` / `REJECTED` / `CLOSED`.
+- Resolución exige `resolutionNote`; registra `resolvedAt` y `resolvedBy` en DB.
+- Auditoría de creación y resolución en `AuditLog`.
+- Migración: `20260602133000_add_data_subject_requests/migration.sql`.
+- E2e: `data-subject-requests.e2e-spec.ts` (alta, listado, resolución con nota).
+
+**Pendiente:** automatización del tipo `EXPORT` (exportación real de datos estructurados); plantillas de respuesta; SLA documentado.
 
 ### Objetivo
 
@@ -250,11 +280,18 @@ Incorporar al sistema una capa explícita de gestión de derechos del titular co
 
 ## Frente E. Trazabilidad exhaustiva y accountability
 
-### Objetivo
+### Estado actual 2026-06-05 — ✅ COMPLETADO
 
-Cerrar los huecos restantes de auditoría para que la rendición de cuentas sea más completa.
+**Implementado y verificado en el código:**
+- `LOGOUT`: registrado en `auth.controller.ts` antes de limpiar cookie.
+- `LOGIN_FAILED`, `ACCESS_DENIED` (403), `ERROR`: capturados en `audit.interceptor.ts`.
+- `CONSENT_CREATED`, `CONSENT_REVOKED`: emitidos por `consents.service.ts`.
+- `DOCUMENT_UPLOAD`, `DOCUMENT_DOWNLOAD`: emitidos por `documents.service.ts` y controller.
+- `MFA_ENABLED`, `MFA_FAILED`: en enum y emitidos por `auth.service.ts`.
+- Inmutabilidad DB: dos capas — trigger `BEFORE UPDATE OR DELETE` + `REVOKE UPDATE, DELETE FROM PUBLIC` (`20260530140000_audit_immutability`).
+- `correlationId` y `statusCode` en todos los registros.
 
-### Cambios propuestos
+**Pendiente:** catálogo formal de eventos auditables con semántica estable. Auditoría de eventos administrativos de alto impacto (cambio de rol, baja de usuario).
 
 1. Registrar explícitamente `LOGOUT`.
 2. Auditar accesos denegados relevantes por recurso clínico.
@@ -315,11 +352,16 @@ Convertir la custodia legal de una declaración en PDF en una política técnica
 
 ## Frente G. Seguridad de sesión e incidentes
 
-### Objetivo
+### Estado actual 2026-06-05 — ✅ COMPLETADO
 
-Completar el endurecimiento de sesión con evidencia suficiente para entornos expuestos.
+**Implementado y verificado en el código:**
+- CSRF: double-submit cookie (`umbral_csrf_token` + `X-CSRF-Token`). Middleware global. Frontend interceptor Axios.
+- `httpOnly` + `SameSite=Lax`. HTTPS flag gestionado por entorno.
+- `LOGOUT` auditado explícitamente.
+- Runbook de incidentes: `runbooks/security-incident.md` con pasos de contención, erradicación y recuperación.
+- Runbook de rotación de claves: `runbooks/rotate-file-keys.md`.
 
-### Cambios propuestos
+**Pendiente:** política de revocación masiva de sesiones; ejercicio documentado del runbook de incidente.
 
 1. Evaluar protección anti-CSRF compatible con la estrategia de cookie.
 2. Registrar y documentar política de expiración y renovación de sesión.

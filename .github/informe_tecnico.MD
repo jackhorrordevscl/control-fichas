@@ -184,7 +184,9 @@ Con ese criterio, el **progreso global de la optimización es 100%** en el alcan
 
 ### Interpretación recomendada
 
-El porcentaje más representativo para gestión es el **100% ponderado** dentro del alcance verificable del workspace, porque el proyecto ya resolvió los hallazgos con impacto directo en confidencialidad, trazabilidad y operación segura, y además dejó aplicada la última migración local pendiente junto con cobertura end-to-end sobre los flujos transversales más sensibles.
+El porcentaje más representativo para gestión es el **100% ponderado** dentro del alcance verificable del workspace y su entorno local configurado, ya que el repositorio cerró las remediaciones técnicas auditadas y añadió pruebas e2e para los flujos críticos.
+
+**Advertencia importante:** este 100% corresponde exclusivamente a la remediación técnica verificada en el *workspace* y no debe interpretarse como acreditación legal o cumplimiento estricto frente a Ley 20.584, Ley 19.628 o Ley 21.719. Para declarar cumplimiento legal estricto es necesario completar y evidenciar controles operativos en los entornos desplegados (gestión de claves en producción, cifrado en reposo verificado, inmutabilidad a nivel DB, y evidencia de gestión de derechos del titular en producción). 
 
 ---
 

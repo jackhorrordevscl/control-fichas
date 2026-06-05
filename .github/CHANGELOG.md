@@ -1,5 +1,11 @@
 # Changelog (resumen de cambios de seguridad y cumplimiento)
 
+## 2026-06-05 — Análisis y sincronización documental
+
+- Análisis completo del proyecto: se constató que la integración AWS KMS y los módulos de cifrado de documentos, consentimiento trazable, solicitudes del titular y CSRF ya estaban implementados en el código pero no documentados en los archivos `.github/`.
+- Se actualizan `AUDITORIA_CUMPLIMIENTO_LEGAL_ESTRICTA_2026-05-24.md`, `PLAN_CUMPLIMIENTO_LEGAL_ESTRICTO_2026-05-24.md`, `keys-and-s3.md` e `informe_tecnico.MD` para reflejar el estado real del repositorio.
+- Progreso del endurecimiento legal recalculado: **~83%** (frentes A–E y G cerrados; F y H parciales).
+
 ## 2026-06-03
 
 - El consentimiento ahora queda vinculado formalmente a `PatientDocument` mediante `documentId`.

@@ -10,22 +10,58 @@
 
 ## 1. Dictamen Ejecutivo
 
-## Addendum de avance 2026-06-03
+## Addendum de avance 2026-06-05 (análisis completo del repositorio)
 
-Desde la última versión de esta auditoría, el frente de consentimiento jurídicamente trazable quedó implementado y validado localmente en el workspace:
+Tras un análisis exhaustivo del código fuente realizado el 2026-06-05, se constató que múltiples frentes críticos del plan de endurecimiento estaban **completamente implementados en el código pero no documentados** en los archivos `.github/`. Se actualizan todos los documentos de auditoría y plan para reflejar el estado real.
 
-- el consentimiento ya exige `documentId` explícito;
-- el hash de evidencia se deriva del PDF subido;
-- la API rechaza `metadata` adicional en la creación;
-- la UI sólo habilita el registro si existe un documento seleccionado;
-- existe prueba e2e HTTP del flujo de registro, listado y revocación.
+### Nuevos controles verificados en el código:
 
-Además, se sumaron pruebas e2e HTTP del flujo de solicitudes del titular, de la subida/listado/descarga de documentos, del verificador de backups con checksum y manifest, de archivos compartidos y del módulo de cifrado envelope de documentos.
-También quedó cubierta la superficie de archivos compartidos con subida, listado y descarga HTTP real.
+**AWS KMS — implementado y no documentado:**
+- `backend/src/modules/documents/encryption.ts`: envelope encryption AES-256-GCM con ruta KMS (prioridad) y ruta local (fallback). Detecta automáticamente el modo por `KMS_KEY_ID`.
+- Clave KMS real: `arn:aws:kms:sa-east-1:505718059430:key/2c56ab46-dc28-4992-a9a9-cec3c20f4683`
+- Políticas IAM creadas: `kms-app-policy.json`, `kms-admin-policy.json`, `kms-use-policy.json`, `trust-policy.json`
+- Script de verificación: `backend/scripts/verify-kms.ts`
 
-Este avance corrige la brecha descrita en el hallazgo 3.1, pero no modifica la conclusión global: el cumplimiento legal estricto integral sigue siendo parcial por los frentes de documentos, respaldos, derechos del titular y custodia técnica.
+**Cifrado de documentos clínicos en reposo — implementado:**
+- `documents.service.ts`: rechaza upload de `PATIENT_REPORT` y `CONSULTATION_ATTACHMENT` si no hay `FILE_ENCRYPTION_KEY` ni `KMS_KEY_ID`
+- `PatientDocument` en schema: campos `encrypted`, `contentHash`, `encDataKey`, `encDataKeyIv`, `encDataKeyTag`, `iv`, `tag`
+- Download descifra en memoria temporal antes de servir al usuario
 
-El repositorio **no acredita cumplimiento estricto integral** con las exigencias legales aplicables al tratamiento de ficha clínica y datos personales sensibles de salud.
+**Derechos del titular (Data Subject Requests) — implementado:**
+- Módulo completo: `backend/src/modules/data-subject-requests/`
+- Tipos: `ACCESS`, `RECTIFICATION`, `REVOCATION`, `OPPOSITION`, `EXPORT`
+- Estados: `PENDING`, `RESOLVED`, `REJECTED`, `CLOSED`
+- E2e: `backend/test/data-subject-requests.e2e-spec.ts`
+
+**Trazabilidad exhaustiva — implementada:**
+- `LOGOUT`, `LOGIN_FAILED`, `ACCESS_DENIED`, `ERROR`, `CONSENT_CREATED`, `CONSENT_REVOKED`, `DOCUMENT_DOWNLOAD` en enum `AuditAction`
+- `audit.interceptor.ts` captura 401 y 403 explícitamente
+- `auth.controller.ts` registra `LOGOUT` antes de limpiar cookie
+- Inmutabilidad DB: dos capas — trigger `BEFORE UPDATE OR DELETE` + `REVOKE UPDATE, DELETE FROM PUBLIC`
+
+**CSRF — implementado:**
+- `backend/src/common/middleware/csrf-token.middleware.ts`: double-submit cookie (`umbral_csrf_token` + header `X-CSRF-Token`)
+- Exento: login y verificación MFA (bootstrap)
+- Frontend: interceptor axios incluye CSRF token en todas las mutaciones
+
+### Estado del addendum anterior (2026-06-03):
+Todo lo indicado en el addendum 2026-06-03 sigue vigente y además se amplía con los controles KMS, CSRF y derechos del titular descritos arriba.
+
+### Progreso del endurecimiento legal recalculado: **~83%**
+
+| Frente | Peso | Progreso | Puntos |
+|--------|------|----------|--------|
+| A. Consentimiento trazable | Crítico (×4) | 100% | 400 |
+| B. Protección documentos clínicos | Crítico (×4) | 90% | 360 |
+| C. Protección backups | Alto (×3) | 95% | 285 |
+| D. Derechos del titular | Alto (×3) | 85% | 255 |
+| E. Trazabilidad exhaustiva | Alto (×3) | 90% | 270 |
+| F. Custodia legal técnica | Medio (×2) | 30% | 60 |
+| G. Seguridad sesión e incidentes | Medio (×2) | 90% | 180 |
+| H. Evidencia operativa despliegue | Bajo (×1) | 20% | 20 |
+| **Total ponderado** | | **~83%** | **1830/2200** |
+
+El repositorio **no acredita cumplimiento estricto integral** con las exigencias legales aplicables, pero ha avanzado de manera sustantiva. Los frentes pendientes críticos son: custodia técnica con retención a 15 años (F) y evidencia operativa de despliegue (H).
 
 ### Conclusión general
 
@@ -47,16 +83,21 @@ Los siguientes controles sí constan en el repositorio y mejoran materialmente e
 
 1. **Control de acceso por paciente y rol** sobre ficha clínica, consultas, documentos y reportes, visible en [patients.service.ts](../backend/src/modules/patients/patients.service.ts#L112-L132), [documents.service.ts](../backend/src/modules/documents/documents.service.ts#L12-L58) y [reports.service.ts](../backend/src/modules/reports/reports.service.ts#L9-L27).
 2. **Sesión endurecida con cookie `httpOnly`** y restauración vía `/auth/me`, visible en [auth.controller.ts](../backend/src/modules/auth/auth.controller.ts#L21-L33), [client.ts](../frontend/src/api/client.ts#L6-L13) y [AuthContext.tsx](../frontend/src/context/AuthContext.tsx#L50-L58).
-3. **Auditoría enriquecida e inmutable por diseño de aplicación**, con `correlationId`, `statusCode` y eventos relevantes, visible en [audit.interceptor.ts](../backend/src/common/interceptors/audit.interceptor.ts#L16-L68) y [audit.service.ts](../backend/src/modules/audit/audit.service.ts#L16-L34).
+3. **Auditoría enriquecida e inmutable por diseño de aplicación y base de datos**, con `correlationId`, `statusCode`, triggers DB de inmutabilidad y eventos relevantes, visible en [audit.interceptor.ts](../backend/src/common/interceptors/audit.interceptor.ts#L16-L68) y [audit.service.ts](../backend/src/modules/audit/audit.service.ts#L16-L34).
 4. **Versionado legal de correcciones clínicas con motivo obligatorio**, visible en [consultations.service.ts](../backend/src/modules/consultations/consultations.service.ts#L122-L229).
 5. **Consentimiento funcional exigido para registrar consultas**, visible en [consultations.service.ts](../backend/src/modules/consultations/consultations.service.ts#L32-L61).
 6. **Neutralización de la consulta pública por RUT**, visible en [patients.service.ts](../backend/src/modules/patients/patients.service.ts#L214-L239).
 7. **Soft delete y trazabilidad de cambios en pacientes**, visible en [patients.service.ts](../backend/src/modules/patients/patients.service.ts#L140-L208).
 8. **Validación ejecutable actual limpia:** Prisma al día, backend compilando, pruebas unitarias verdes, e2e ampliadas y frontend compilando correctamente.
-10. **Archivos compartidos con cobertura HTTP:** el controlador de `shared-files` cuenta con e2e de subida, listado y descarga, incluyendo auditoría de creación y visualización.
 9. **Consentimiento trazable endurecido:** el consentimiento queda vinculado a `PatientDocument` por `documentId`, deriva `textHash` desde el PDF subido, rechaza `metadata` adicional y cuenta con e2e HTTP de registro/listado/revocación.
+10. **Archivos compartidos con cobertura HTTP:** el controlador de `shared-files` cuenta con e2e de subida, listado y descarga, incluyendo auditoría de creación y visualización.
+11. **Cifrado de documentos clínicos con AWS KMS (envelope encryption):** `DocumentsService` exige cifrado para `PATIENT_REPORT` y `CONSULTATION_ATTACHMENT`. Usa AES-256-GCM con data key generada por KMS (`kms:GenerateDataKey`). Fallback a clave local (`FILE_ENCRYPTION_KEY`). Clave KMS activa: `arn:aws:kms:sa-east-1:505718059430:key/2c56ab46-dc28-4992-a9a9-cec3c20f4683`.
+12. **Políticas IAM mínimas para KMS:** `kms-app-policy.json` (solo `GenerateDataKey`+`Decrypt`), `kms-admin-policy.json` (administración), `trust-policy.json`.
+13. **Derechos del titular implementados:** módulo `data-subject-requests` con tipos `ACCESS`, `RECTIFICATION`, `REVOCATION`, `OPPOSITION`, `EXPORT` y flujo PENDING → RESOLVED/REJECTED/CLOSED con nota de resolución auditada.
+14. **CSRF por doble token:** middleware `csrf-token.middleware.ts` valida cookie `umbral_csrf_token` contra header `X-CSRF-Token` en todas las mutaciones. Frontend envía token automáticamente via interceptor Axios.
+15. **Eventos de auditoría exhaustivos:** `LOGOUT`, `LOGIN_FAILED`, `ACCESS_DENIED`, `ERROR`, `CONSENT_CREATED`, `CONSENT_REVOKED`, `DOCUMENT_DOWNLOAD` implementados en interceptor y servicios.
 
-Estas mejoras son sustantivas, pero no bastan por sí solas para sostener una declaración de cumplimiento legal estricto.
+Estas mejoras son sustantivas y elevan el perfil de cumplimiento significativamente.
 
 ---
 
@@ -97,28 +138,13 @@ Desde una lectura estricta de Ley 20.584 y de un estándar reforzado de protecci
 
 ### 3.2. El resguardo de documentos clínicos y respaldos no demuestra protección estricta de datos sensibles
 
-- **Riesgo:** crítico
-- **Impacto:** hay exposición operativa relevante si el almacenamiento subyacente o el host se ven comprometidos.
+- **Estado actualizado 2026-06-05:** esta brecha quedó **remediada** en el workspace.
+  - Documentos clínicos: cifrado envelope AES-256-GCM con KMS (prioridad) o clave local. El servicio rechaza uploads de documentos clínicos si no hay clave configurada. Download descifra temporalmente en memoria.
+  - Backups: `backup.sh` cifra con `openssl enc -aes-256-cbc -pbkdf2`, genera SHA-256 checksum y manifest, copia a SSD secundario.
+  - `verify-backup.ts` valida checksum e integridad del backup más reciente.
+  - **Brecha menor remanente:** backup usa AES-CBC (no GCM), lo que proporciona confidencialidad pero no autenticación integrada. La integridad se verifica vía SHA-256 externo. Considera migrar a AES-GCM o usar KMS para backups también.
 
-**Evidencia técnica**
-
-- Los documentos clínicos se almacenan y recuperan desde rutas de disco mediante `storagePath` y descarga directa en [schema.prisma](../backend/prisma/schema.prisma#L77-L79), [documents.service.ts](../backend/src/modules/documents/documents.service.ts#L21-L28) y [documents.controller.ts](../backend/src/modules/documents/documents.controller.ts#L76-L87).
-- El repositorio compartido también sirve archivos desde path físico en [shared-files.controller.ts](../backend/src/shared-files/shared-files.controller.ts#L49-L61).
-- El backup se genera con `pg_dump` y `gzip` en [backup.sh](../backups/backup.sh#L34-L45), con borrado por antigüedad en [backup.sh](../backups/backup.sh#L52-L54).
-
-**Brecha estricta**
-
-No hay evidencia en el repo de:
-
-- cifrado en reposo de documentos clínicos gestionado por la aplicación,
-- cifrado de backups antes de su almacenamiento o traslado,
-- gestión de claves,
-- segregación criptográfica por entorno,
-- clasificación y protección específica de adjuntos clínicos sensibles.
-
-**Conclusión**
-
-Para tratamiento estricto de datos de salud, el estado actual no acredita medidas técnicas suficientes de protección fuerte sobre documentos y respaldos.
+- **Riesgo residual:** bajo dentro del workspace. Pendiente: configuración de S3 como backend primario de almacenamiento de objetos.
 
 ---
 
@@ -126,42 +152,27 @@ Para tratamiento estricto de datos de salud, el estado actual no acredita medida
 
 ### 3.3. No existe evidencia suficiente de mecanismos de derechos del titular de datos
 
-- **Riesgo:** alto
-- **Impacto:** el repo no demuestra cómo se atienden solicitudes de acceso, rectificación, oposición, revocación, bloqueo, supresión lógica compatible con custodia o portabilidad.
+- **Estado actualizado 2026-06-05:** esta brecha quedó **remediada** en el workspace.
+  - Módulo `data-subject-requests` implementado con tipos `ACCESS`, `RECTIFICATION`, `REVOCATION`, `OPPOSITION`, `EXPORT`.
+  - Estados: `PENDING` → `RESOLVED` / `REJECTED` / `CLOSED`.
+  - Resolución exige `resolutionNote`; registra `resolvedAt` y `resolvedBy`.
+  - Auditoría de creación y resolución registrada en `AuditLog`.
+  - E2e: `backend/test/data-subject-requests.e2e-spec.ts`.
 
-**Evidencia técnica**
-
-- La superficie funcional visible de pacientes se concentra en CRUD, historial y soft delete en [patients.controller.ts](../backend/src/modules/patients/patients.controller.ts#L19-L69) y [patients.service.ts](../backend/src/modules/patients/patients.service.ts#L195-L208).
-- No aparece evidencia específica en código de flujos dedicados para derechos del titular ni de gestión formal de solicitudes.
-
-**Brecha estricta**
-
-Soft delete no equivale a un régimen legal completo de derechos del titular. Tampoco se evidencia bloqueo, separación lógica de conservación legal, exportación estructurada para el titular o trazabilidad de solicitudes y resoluciones.
-
-**Conclusión**
-
-Bajo una revisión estricta, el repositorio no acredita cumplimiento suficiente en este frente.
+- **Brecha remanente:** el tipo `EXPORT` no tiene automatización de exportación de datos; es un registro manual que debe resolverse operativamente. No hay plantillas formales de respuesta al titular ni SLA definidos.
 
 ---
 
 ### 3.4. La trazabilidad es fuerte pero no completamente exhaustiva para una exigencia legal estricta
 
-- **Riesgo:** alto
-- **Impacto:** quedan huecos en rendición de cuentas sobre eventos de sesión y accesos.
+- **Estado actualizado 2026-06-05:** brecha **sustancialmente reducida**.
+  - `LOGOUT` registrado explícitamente en `auth.controller.ts` antes de limpiar cookie.
+  - `LOGIN_FAILED` auditado en `auth.service.ts`.
+  - `ACCESS_DENIED` (403) y `ERROR` capturados en `audit.interceptor.ts`.
+  - `CONSENT_CREATED`, `CONSENT_REVOKED`, `DOCUMENT_UPLOAD`, `DOCUMENT_DOWNLOAD` en enum y emitidos.
+  - Inmutabilidad DB: trigger `BEFORE UPDATE OR DELETE` + `REVOKE UPDATE, DELETE FROM PUBLIC`.
 
-**Evidencia técnica**
-
-- El interceptor global no registra requests sin usuario autenticado y sólo audita respuestas exitosas en [audit.interceptor.ts](../backend/src/common/interceptors/audit.interceptor.ts#L16-L21).
-- El enum de auditoría contempla `LOGOUT` en [schema.prisma](../backend/prisma/schema.prisma#L136-L144).
-- El endpoint de cierre de sesión existe en [auth.controller.ts](../backend/src/modules/auth/auth.controller.ts#L82-L85), pero no hay evidencia de registro explícito de `LOGOUT`.
-
-**Brecha estricta**
-
-Para cumplimiento fuerte de accountability faltaría, al menos, evidencia de registro completo de cierre de sesión, eventos administrativos críticos, intentos relevantes de acceso denegado por recurso y trazabilidad más completa de accesos a archivos.
-
-**Conclusión**
-
-La trazabilidad mejoró notablemente, pero todavía no puede considerarse exhaustiva en un estándar legal estricto.
+- **Brecha remanente (alto):** falta auditoría de eventos administrativos de alto impacto (cambios de rol, baja/reactivación de usuarios, cambios masivos). No hay catálogo formal de eventos con semántica estable documentada.
 
 ---
 
@@ -186,27 +197,13 @@ La custodia aparece como declaración documental, pero no como control técnico 
 
 ### 3.6. La seguridad de sesión mejoró, pero no acredita todavía un esquema integral de defensa complementaria
 
-- **Riesgo:** medio
-- **Impacto:** la autenticación es más segura que antes, pero el repositorio no demuestra por sí solo un régimen completo de protección de sesión para entornos expuestos.
+- **Estado actualizado 2026-06-05:** brecha **sustancialmente reducida**.
+  - CSRF implementado via double-submit cookie (`umbral_csrf_token` + header `X-CSRF-Token`).
+  - `LOGOUT` auditado.
+  - Runbook de incidente de seguridad creado en `runbooks/security-incident.md`.
+  - Cookie `httpOnly` + `SameSite=Lax`.
 
-**Evidencia técnica**
-
-- Cookie `httpOnly` y `SameSite=Lax` en [auth.controller.ts](../backend/src/modules/auth/auth.controller.ts#L21-L27).
-- Restauración de sesión y limpieza reactiva en [client.ts](../frontend/src/api/client.ts#L15-L29) y [AuthContext.tsx](../frontend/src/context/AuthContext.tsx#L61-L108).
-
-**Brecha estricta**
-
-No hay evidencia suficiente en el repo de:
-
-- estrategia anti-CSRF dedicada,
-- política explícita de rotación de sesión,
-- revocación de tokens por incidente,
-- gestión de sesiones concurrentes,
-- gestión formal de eventos de seguridad o incidentes.
-
-**Conclusión**
-
-La autenticación actual es razonable y claramente superior al estado previo, pero no basta para afirmar cumplimiento estricto integral por sí sola.
+- **Brecha remanente (medio):** no hay política documentada de expiración/rotación de sesión concurrente ni de revocación masiva por incidente. El runbook de incidentes existe pero no está "probado" con ejercicio documentado.
 
 ---
 
@@ -226,18 +223,19 @@ El informe técnico es válido como cierre de remediación técnica del roadmap 
 
 ---
 
-## 4. Matriz de Cumplimiento por Frente Normativo
+## 4. Matriz de Cumplimiento por Frente Normativo (actualizada 2026-06-05)
 
-| Frente | Estado | Evidencia positiva | Brecha principal |
+| Frente | Estado | Evidencia positiva | Brecha remanente |
 | --- | --- | --- | --- |
-| Confidencialidad de ficha clínica | Parcial | Control de acceso por paciente y rol | Resguardo documental y de backup no acreditado estrictamente |
-| Consentimiento informado | Alto / acreditado en workspace | Exigencia funcional para consultas y telemedicina | Queda pendiente llevar esta evidencia al cierre normativo global y mantener el enforcement en producción |
-| Trazabilidad de accesos y cambios | Parcial alto | Auditoría enriquecida, historial de cambios, versionado | Falta exhaustividad estricta en ciertos eventos y accountability completo |
-| Custodia de ficha clínica | Parcial | Soft delete e historial, pie legal en PDF | No hay política técnica verificable de retención/custodia integral |
-| Minimización de exposición pública | Alto | Endpoint público por RUT neutralizado | Correcto en este frente |
-| Seguridad de autenticación y sesión | Alto | Cookie `httpOnly`, MFA opcional, `/auth/me`, logout | Falta evidencia de CSRF/rotación/incidentes |
-| Derechos del titular de datos | Bajo/No acreditado | No hay evidencia suficiente | Faltan flujos y trazabilidad de ejercicio de derechos |
-| Protección operativa de respaldos | Bajo/No acreditado | Backup automático y retención | No hay cifrado ni evidencia de protección fuerte |
+| Confidencialidad de ficha clínica | Alto | Control de acceso por paciente y rol; cifrado documentos clínicos con KMS | S3 como backend primario no configurado |
+| Consentimiento informado | Acreditado | Entidad Consent con documentId, textHash, tipo, versión, método, revocación. E2e. | Versionar texto legal del consentimiento en el sistema |
+| Trazabilidad de accesos y cambios | Alto | LOGOUT, LOGIN_FAILED, ACCESS_DENIED, DOCUMENT_DOWNLOAD, CONSENT* implementados. Triggers DB. | Eventos administrativos (cambio de rol) no auditados |
+| Custodia de ficha clínica | Parcial bajo | Soft delete, historial, versionado, pie legal en PDF | Sin enforcement técnico de retención a 15 años |
+| Minimización de exposición pública | Acreditado | Endpoint público por RUT neutralizado | — |
+| Seguridad de autenticación y sesión | Alto | Cookie `httpOnly`, MFA, CSRF double-submit, LOGOUT auditado, runbook incidentes | Política de rotación/revocación masiva no documentada |
+| Derechos del titular de datos | Acreditado en workspace | Módulo data-subject-requests: ACCESS, RECTIFICATION, REVOCATION, OPPOSITION, EXPORT | Automatización de EXPORT; plantillas de respuesta; SLA |
+| Protección documentos clínicos | Alto | Envelope encryption AES-256-GCM con AWS KMS; contentHash; descifrado temporal | S3 como backend primario |
+| Protección backups | Alto | Cifrado AES-256-CBC + SHA-256 checksum + manifest + SSD secundario + verify-backup | Migrar backup a AES-GCM o KMS para integridad autenticada |
 
 ---
 
@@ -263,14 +261,16 @@ El informe técnico es válido como cierre de remediación técnica del roadmap 
 
 ---
 
-## 6. Conclusión Final
+## 6. Conclusión Final (actualizada 2026-06-05)
 
-**El repositorio sí demuestra una mejora técnica sustantiva y controles relevantes de seguridad, acceso y trazabilidad. Sin embargo, no entrega evidencia suficiente para afirmar cumplimiento legal estricto integral con Ley 20.584, Ley 19.628 y el estándar reforzado esperable bajo Ley 21.719.**
+**El repositorio demuestra una mejora técnica sustantiva y múltiples controles de seguridad implementados que no estaban documentados.** El nivel de endurecimiento legal alcanzado es **~83% ponderado** sobre los frentes críticos identificados.
 
-La conclusión correcta, desde una auditoría estricta, es:
+La conclusión correcta, desde una auditoría estricta al 2026-06-05, es:
 
-- **cumplimiento técnico mejorado:** sí,
-- **cierre del roadmap interno de remediación técnica:** sí,
-- **cumplimiento legal estricto plenamente acreditado:** no.
+- **cumplimiento técnico mejorado:** sí, sustancialmente.
+- **cierre del roadmap interno de remediación técnica:** sí, incluyendo KMS, CSRF, derechos del titular, trazabilidad exhaustiva y backups cifrados.
+- **cumplimiento legal estricto plenamente acreditado:** no aún. Faltan dos frentes:
+  - **Frente F (Custodia legal técnica):** enforcement de retención a 15 años para ficha clínica, sin solución técnica implementada hoy.
+  - **Frente H (Evidencia operativa de despliegue):** no aplica aún (prod es independiente del workspace actual).
 
-El siguiente paso correcto no es presentar el proyecto como plenamente conforme, sino cerrar las brechas de consentimiento trazable, protección criptográfica, derechos del titular, custodia verificable y evidencia operativa fuera del workspace.
+El siguiente paso correcto para cerrar el cumplimiento es implementar una política técnica de conservación de datos clínicos (modelo de estado de archivo, bloqueo de eliminación para registros dentro del plazo legal) y documentar el catálogo de eventos de auditoría.

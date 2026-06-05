@@ -1,38 +1,111 @@
-# Claves de cifrado y S3 — Guía rápida
+# Claves de cifrado y S3 — Guía técnica actualizada
 
-Resumen corto:
-- `FILE_ENCRYPTION_KEY`: clave exclusiva para cifrar/descifrar documentos clínicos en `DocumentsService`.
-- `BACKUP_ENCRYPTION_KEY`: clave exclusiva para cifrar backups automáticos.
-- No usar `BACKUP_ENCRYPTION_KEY` como fallback para documentos clínicos.
-- Cada backup genera un manifest y un checksum; la verificación automatizada vive en `backend/scripts/verify-backup.ts`.
+**Última actualización:** 2026-06-05 (sincronización con estado real del repositorio)
 
-Entorno y variables esperadas:
-- `FILE_ENCRYPTION_KEY` — valor de la clave de cifrado de archivos (entorno de producción: gestionar con KMS/Vault, no en `.env`).
-- `BACKUP_ENCRYPTION_KEY` — clave para backups.
-- `KMS_KEY_ID` — identificador de KMS para envelope encryption de documentos o backups cuando el proveedor lo soporte.
-- `S3_BUCKET`, `S3_REGION` — configuración opcional para subir documentos a S3.
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` — credenciales de S3 (en prod usar roles IAM en lugar de credenciales persistentes).
+---
 
-Recomendaciones operativas:
-- Producción: almacenar claves en AWS KMS / HashiCorp Vault / Azure Key Vault. Aplicación debe recuperar claves a través de SDK o inyectadas por el orquestador (Kubernetes Secrets montadas, AWS KMS envelopes, etc.).
-- No escribir claves en `.env` de repositorio ni en scripts de instalación que se suban al control de versiones.
-- Para S3, usar un role con permisos mínimos: `s3:PutObject`, `s3:GetObject`, `s3:ListBucket` sobre el prefijo `documents/`.
+## Estado real de implementación (verificado 2026-06-05)
 
-Runbook breve — rotación de `FILE_ENCRYPTION_KEY`:
-1. Generar nueva clave segura (por ejemplo `openssl rand -hex 32`).
-2. Añadir nueva clave a KMS/Vault y marcarla como activa (o crear versión nueva).
-3. Actualizar la aplicación para que use la nueva clave para cifrar nuevos archivos (sin modificar los antiguos).
-4. Para re-cifrar archivos antiguos (opcional): escribir un proceso seguro que lea objetos, los descifre con la clave antigua y los re-encripte con la nueva, registrando el progreso y haciendo copia de seguridad antes de cambios masivos.
+### AWS KMS — IMPLEMENTADO ✅
 
-Notas para desarrollo local:
-- `install.sh` puede generar claves aleatorias para pruebas locales. En entorno CI/producción, deshabilitar esta generación y usar KMS.
-- Si se necesita una instalación estricta, usar `STRICT_SECRET_MODE=true` y proporcionar explícitamente `DB_PASSWORD`, `JWT_SECRET`, `ADMIN_PASSWORD`, `BACKUP_ENCRYPTION_KEY` y `FILE_ENCRYPTION_KEY`.
+La integración con AWS KMS está **completamente implementada** en el código. No es planificada: ya existe código funcional.
 
-Auditoría y seguridad:
-- Las operaciones de upload/download deben estar auditadas (ya se registran en `AuditInterceptor`).
-- Las operaciones de upload/download de documentos clínicos también deben registrar evento específico `DOCUMENT_UPLOAD` / `DOCUMENT_DOWNLOAD`.
-- Mantener logs de acceso y rotación de claves para cumplimiento.
+**Clave KMS activa:**
+- ARN: `arn:aws:kms:sa-east-1:505718059430:key/2c56ab46-dc28-4992-a9a9-cec3c20f4683`
+- Región: `sa-east-1` (São Paulo)
+- Account: `505718059430`
 
-Contacto y próximas tareas:
-- Implementar integración con un proveedor KMS (AWS KMS / Vault) y un proceso automatizado de rotación.
-- Mantener `FILE_ENCRYPTION_KEY` separado de `BACKUP_ENCRYPTION_KEY` en todos los entornos.
+**Políticas IAM creadas (archivos en raíz del repositorio):**
+- `kms-app-policy.json` — permisos mínimos para la app: `kms:GenerateDataKey` + `kms:Decrypt`
+- `kms-admin-policy.json` — permisos de administración de clave: rotación, etiquetado, alias
+- `kms-use-policy.json` — duplicado de app-policy (puede consolidarse)
+- `trust-policy.json` — permite al account root asumir el rol
+
+**Cómo funciona (Envelope Encryption en `backend/src/modules/documents/encryption.ts`):**
+
+```
+Si KMS_KEY_ID está configurado:
+  1. kms.generateDataKey({ KeyId, KeySpec: 'AES_256' }) → { Plaintext, CiphertextBlob }
+  2. Cifra el archivo con dataKey (AES-256-GCM) → ciphertext, iv, tag
+  3. Almacena CiphertextBlob como encDataKey (encDataKeyIv = null → indica modo KMS)
+
+Si solo FILE_ENCRYPTION_KEY (modo local):
+  1. Genera dataKey aleatoria (32 bytes)
+  2. Cifra archivo con dataKey (AES-256-GCM) → ciphertext, iv, tag
+  3. Cifra dataKey con masterKey (AES-256-GCM) → encDataKey, encDataKeyIv, encDataKeyTag
+
+Al descargar: detecta modo por presencia/ausencia de encDataKeyIv
+  - Si null → KMS path: kms.decrypt(CiphertextBlob) → dataKey → descifra archivo
+  - Si valor → local path: descifra dataKey con masterKey → descifra archivo
+```
+
+**Tipos de documento que REQUIEREN cifrado:**
+- `PATIENT_REPORT` ✅
+- `CONSULTATION_ATTACHMENT` ✅
+
+**Tipos que NO requieren cifrado:** `INFORMED_CONSENT`, `TELEMED_AGREEMENT`, `OTHER`
+
+**Script de verificación:** `backend/scripts/verify-kms.ts`
+```bash
+KMS_KEY_ID=<arn> npx ts-node backend/scripts/verify-kms.ts
+# o con clave local:
+FILE_ENCRYPTION_KEY=<base64> npx ts-node backend/scripts/verify-kms.ts
+```
+
+---
+
+### Cifrado de Backups — IMPLEMENTADO ✅
+
+El script `backups/backup.sh` cifra con `openssl enc -aes-256-cbc -pbkdf2 -salt` cuando `BACKUP_ENCRYPTION_KEY` está presente. Genera SHA-256 checksum + manifest JSON. Copia a SSD secundario (regla 3-2-1). Retención de 30 días.
+
+**Nota técnica:** usa AES-256-CBC (no GCM). La integridad se verifica via SHA-256 del archivo cifrado (no mediante auth tag). Esto es suficiente para detección de corrupción accidental pero no para detección de manipulación activa. Para mayor seguridad reemplazar con `openssl enc -aes-256-gcm` o usar KMS para backups también.
+
+**Verificación:**
+```bash
+npm --prefix backend run verify:backup
+```
+
+---
+
+## Variables de entorno
+
+| Variable | Uso | Requerida |
+|----------|-----|-----------|
+| `KMS_KEY_ID` | ARN o alias de clave KMS (prevalece sobre FILE_ENCRYPTION_KEY) | En prod (recomendado) |
+| `FILE_ENCRYPTION_KEY` | Clave AES-256 en base64 (fallback si no hay KMS) | En dev/si no hay KMS |
+| `BACKUP_ENCRYPTION_KEY` | Clave para cifrado de backups (separada de documentos) | Recomendada siempre |
+| `AWS_REGION` | Región AWS para KMS y S3 (ej: `sa-east-1`) | Si usa KMS |
+| `AWS_ACCESS_KEY_ID` | Solo si no usa IAM role | No en prod con roles IAM |
+| `AWS_SECRET_ACCESS_KEY` | Solo si no usa IAM role | No en prod con roles IAM |
+| `S3_BUCKET` | Bucket S3 para almacenamiento de documentos (opcional) | No (opcional) |
+| `S3_REGION` | Región S3 (fallback de AWS_REGION) | No (opcional) |
+
+**Nota:** En desarrollo local, `install.sh` genera `FILE_ENCRYPTION_KEY` y `BACKUP_ENCRYPTION_KEY` automáticamente si no están definidas. En modo estricto (`STRICT_SECRET_MODE=true`) exige que vengan del entorno.
+
+---
+
+## S3 — Estado actual
+
+El código de `documents.controller.ts` detecta si `storagePath` comienza con `s3://` y descarga/descifra desde S3. Sin embargo, el upload actual guarda localmente en disco (no sube a S3 automáticamente). S3 está preparado en el código de descarga pero no como backend de almacenamiento primario.
+
+**Para habilitar S3 como backend primario:** configurar `S3_BUCKET` y modificar `DocumentsService.uploadDocument` para subir a S3 en lugar de disco local.
+
+---
+
+## Runbook de rotación de FILE_ENCRYPTION_KEY
+
+Ver detalle en [`runbooks/rotate-file-keys.md`](runbooks/rotate-file-keys.md). Resumen:
+
+1. Generar nueva clave: `openssl rand -base64 32`
+2. Configurar en secret manager como activa
+3. Re-encriptar documentos existentes (proceso batch con old_key → new_key)
+4. Verificar integridad post-rotación
+5. Destruir old_key tras periodo de retención
+
+---
+
+## Auditoría de claves
+
+- `DOCUMENT_UPLOAD` y `DOCUMENT_DOWNLOAD` están en el enum `AuditAction` y son emitidos por el interceptor
+- Mantener log de rotaciones de clave separado del `AuditLog` de la aplicación
+- No commitear claves en el repositorio. Usar `STRICT_SECRET_MODE=true` en entornos controlados.
