@@ -61,16 +61,16 @@ function IdleManager() {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
+
       <Route
-        path="/"
         element={
           <PrivateRoute>
             <Layout />
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="patients" element={<PatientsPage />} />
         <Route path="consultations" element={<ConsultationsPage />} />
