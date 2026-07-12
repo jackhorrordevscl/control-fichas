@@ -1,4 +1,5 @@
 import { Controller, Post, Body, UseGuards, Get, Req, Res } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { AuditService } from '../audit/audit.service';
 import { LoginDto } from './dto/login.dto';
@@ -53,6 +54,7 @@ export class AuthController {
     res.clearCookie(AUTH_COOKIE_NAME, this.getCookieOptions());
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   async login(
     @Body() dto: LoginDto,
@@ -86,6 +88,7 @@ export class AuthController {
     return user;
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('mfa/verify')
   async verifyMfa(
     @Body() dto: VerifyMfaDto,
