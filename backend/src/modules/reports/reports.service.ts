@@ -153,10 +153,10 @@ export class ReportsService {
 
       // ── PIE DE PÁGINA ────────────────────────────────────
       doc.moveDown(2);
-      doc.fontSize(9).font('Helvetica')
-        .text(getCustodyFooterLines()[0], { align: 'center' });
-      doc.text(getCustodyFooterLines()[1], { align: 'center' });
-      doc.text(getCustodyFooterLines()[2], { align: 'center' });
+      doc.fontSize(9).font('Helvetica');
+      getCustodyFooterLines().forEach((line) => {
+        doc.text(line, { align: 'center' });
+      });
 
       doc.end();
     });

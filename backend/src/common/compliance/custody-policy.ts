@@ -16,5 +16,6 @@ export function getCustodyFooterLines() {
     'Documento Confidencial',
     `Ley 20.584 — Custodia obligatoria ${CUSTODY_POLICY.clinicalRecordRetentionYears} años`,
     `Respaldo operativo: ${CUSTODY_POLICY.operationalBackupRetentionDays} días`,
+    'Para ejercer sus derechos ARCO (Ley 19.628), escriba a admin@morgadoyasociados.cl',
   ];
 }

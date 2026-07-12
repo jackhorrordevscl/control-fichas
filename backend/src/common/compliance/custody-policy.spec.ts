@@ -13,6 +13,7 @@ describe('custody policy', () => {
       'Documento Confidencial',
       'Ley 20.584 — Custodia obligatoria 15 años',
       'Respaldo operativo: 30 días',
+      'Para ejercer sus derechos ARCO (Ley 19.628), escriba a admin@morgadoyasociados.cl',
     ]);
   });
 });
