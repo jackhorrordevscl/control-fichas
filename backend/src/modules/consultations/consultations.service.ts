@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PatientsService } from '../patients/patients.service';
 import { CreateConsultationDto } from './dto/create-consultation.dto';
 import { CorrectConsultationDto } from './dto/correct-consultation.dto';
 
@@ -13,7 +14,10 @@ function parseDate(dateStr: string): Date {
 
 @Injectable()
 export class ConsultationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private patientsService: PatientsService,
+  ) {}
 
   async create(dto: CreateConsultationDto, therapistId: string) {
     let patientRut = dto.patientRut ?? '';
@@ -40,7 +44,10 @@ export class ConsultationsService {
     });
   }
 
-  async findByPatient(patientId: string) {
+  async findByPatient(patientId: string, userId: string, userRole: string) {
+    // Lanza NotFoundException/ForbiddenException si el usuario no tiene acceso a este paciente
+    await this.patientsService.findOne(patientId, userId, userRole);
+
     return this.prisma.consultation.findMany({
       where: { patientId },
       orderBy: { createdAt: 'desc' },
@@ -56,7 +63,7 @@ export class ConsultationsService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, userId: string, userRole: string) {
     const consultation = await this.prisma.consultation.findUnique({
       where: { id },
       include: {
@@ -70,11 +77,20 @@ export class ConsultationsService {
       },
     });
     if (!consultation) throw new NotFoundException('Consulta no encontrada');
+
+    // Lanza ForbiddenException si el usuario no tiene acceso al paciente dueño de esta consulta
+    await this.patientsService.findOne(consultation.patientId, userId, userRole);
+
     return consultation;
   }
 
-  async correct(id: string, dto: CorrectConsultationDto, therapistId: string) {
-    const original = await this.findOne(id);
+  async correct(
+    id: string,
+    dto: CorrectConsultationDto,
+    therapistId: string,
+    userRole: string,
+  ) {
+    const original = await this.findOne(id, therapistId, userRole);
 
     // Snapshot del estado actual antes de modificar
     const snapshot = JSON.parse(JSON.stringify({

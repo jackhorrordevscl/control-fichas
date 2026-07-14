@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Observable, tap } from 'rxjs';
 import { AuditService } from '../../modules/audit/audit.service';
+import { getResourceFromUrl } from '../utils/audit-resource.util';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
@@ -32,18 +33,8 @@ export class AuditInterceptor implements NestInterceptor {
       DELETE: 'SOFT_DELETE',
     };
 
-    // Determina el recurso según la URL
-    const getResource = (url: string) => {
-      if (url.includes('/patients')) return 'Patient';
-      if (url.includes('/consultations')) return 'Consultation';
-      if (url.includes('/reports')) return 'Report';
-      if (url.includes('/auth/mfa')) return 'MFA';
-      if (url.includes('/auth')) return 'Auth';
-      return 'Unknown';
-    };
-
     const action = actionMap[method] ?? 'VIEW';
-    const resource = getResource(url);
+    const resource = getResourceFromUrl(url);
 
     return next.handle().pipe(
       tap(() => {

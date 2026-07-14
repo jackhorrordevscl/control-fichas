@@ -24,13 +24,16 @@ export class ConsultationsController {
   }
 
   @Get('patient/:patientId')
-  findByPatient(@Param('patientId') patientId: string) {
-    return this.consultationsService.findByPatient(patientId);
+  findByPatient(
+    @Param('patientId') patientId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.consultationsService.findByPatient(patientId, user.id, user.role);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.consultationsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.consultationsService.findOne(id, user.id, user.role);
   }
 
   @Patch(':id/correct')
@@ -39,6 +42,6 @@ export class ConsultationsController {
     @Body() dto: CorrectConsultationDto,
     @CurrentUser() user: any,
   ) {
-    return this.consultationsService.correct(id, dto, user.id);
+    return this.consultationsService.correct(id, dto, user.id, user.role);
   }
 }

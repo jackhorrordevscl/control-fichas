@@ -1,12 +1,23 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PatientsService } from '../patients/patients.service';
 import PDFDocument = require('pdfkit');
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private patientsService: PatientsService,
+  ) {}
 
-  async generatePatientReport(patientId: string): Promise<Buffer> {
+  async generatePatientReport(
+    patientId: string,
+    userId: string,
+    userRole: string,
+  ): Promise<Buffer> {
+    // Lanza NotFoundException/ForbiddenException si el usuario no tiene acceso a este paciente
+    await this.patientsService.findOne(patientId, userId, userRole);
+
     const patient = await this.prisma.patient.findUnique({
       where: { id: patientId },
       include: {

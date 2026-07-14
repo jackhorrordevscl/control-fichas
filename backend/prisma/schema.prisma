@@ -114,8 +114,8 @@ enum SessionType {
 
 model AuditLog {
   id         String      @id @default(uuid())
-  userId     String
-  user       User        @relation(fields: [userId], references: [id])
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id])
   action     AuditAction
   resource   String
   resourceId String
@@ -136,6 +136,7 @@ enum AuditAction {
   DOCUMENT_UPLOAD
   MFA_ENABLED
   MFA_FAILED
+  UNAUTHORIZED_ATTEMPT
 }
 
 model SharedFile {

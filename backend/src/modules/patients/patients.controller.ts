@@ -6,7 +6,6 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   UseGuards,
 } from '@nestjs/common';
 import { PatientsService } from './patients.service';
@@ -18,15 +17,6 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @Controller('patients')
 export class PatientsController {
   constructor(private patientsService: PatientsService) {}
-
-  // ── Ruta pública ────────────────────────────────────────────────
-  @Get('public/next-session')
-  consultarProximaSesion(@Query('rut') rut: string) {
-    if (!rut || rut.trim().length < 5) {
-      return { found: false, message: 'RUT inválido' };
-    }
-    return this.patientsService.consultarSesionPorRut(rut);
-  }
 
   // ── Rutas protegidas ────────────────────────────────────────────
   @UseGuards(JwtAuthGuard)
