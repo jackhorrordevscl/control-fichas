@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 interface CreateAuditLogDto {
-  userId: string;
+  userId?: string;
   action: string;
   resource: string;
   resourceId: string;
