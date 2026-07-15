@@ -38,6 +38,10 @@ export default function LoginPage() {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [userId, setUserId] = useState('');
   const [mfaToken, setMfaToken] = useState('');
+  const [mfaSetupRequired, setMfaSetupRequired] = useState(false);
+  const [setupToken, setSetupToken] = useState('');
+  const [setupQrCode, setSetupQrCode] = useState('');
+  const [setupMfaCode, setSetupMfaCode] = useState('');
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -51,6 +55,14 @@ export default function LoginPage() {
       if (res.data.requiresMfa) {
         setMfaRequired(true);
         setUserId(res.data.userId);
+      } else if (res.data.requiresMfaSetup) {
+        // Rol administrativo sin MFA: el backend no entrega accessToken,
+        // solo un setupToken de corta duración. Se arranca el enrolamiento
+        // automáticamente para traer el QR y no dejar al usuario con una
+        // sesión activa sin MFA.
+        setMfaSetupRequired(true);
+        setSetupToken(res.data.setupToken);
+        await beginMfaSetup(res.data.setupToken);
       } else if (res.data.accessToken) {
         login(res.data.accessToken, res.data.user);
         navigate('/dashboard');
@@ -80,6 +92,71 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  const beginMfaSetup = async (token: string) => {
+    try {
+      const res = await api.post('/auth/mfa/setup/begin', { setupToken: token });
+      setSetupQrCode(res.data.qrCode);
+    } catch (error) {
+      setError(getApiErrorMessage(error, 'No se pudo iniciar la configuración de MFA.'));
+    }
+  };
+
+  const onMfaSetupSubmit = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/mfa/setup/confirm', {
+        setupToken,
+        token: setupMfaCode,
+      });
+      login(res.data.accessToken, res.data.user);
+      navigate('/dashboard');
+    } catch (error) {
+      setError(getApiErrorMessage(error, 'Código MFA inválido. Intenta de nuevo.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (mfaSetupRequired) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-8">
+        <div className="bg-cream-50 rounded-2xl p-8 w-full max-w-md">
+          <h2 className="font-display text-3xl text-slate-900 mb-2">Activación de MFA requerida</h2>
+          <p className="text-slate-500 text-sm mb-6">
+            Como ADMIN/DIRECTOR, necesitás activar MFA para continuar. Escaneá este código con tu
+            app autenticadora.
+          </p>
+          {setupQrCode && (
+            <div className="flex justify-center mb-4">
+              <img src={setupQrCode} alt="Código QR para configurar MFA" />
+            </div>
+          )}
+          <input
+            type="text"
+            maxLength={6}
+            placeholder="000000"
+            value={setupMfaCode}
+            onChange={e => setSetupMfaCode(e.target.value)}
+            className="input-field text-center text-2xl tracking-widest mb-4"
+          />
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )}
+          <button
+            onClick={onMfaSetupSubmit}
+            disabled={loading || setupMfaCode.length !== 6 || !setupQrCode}
+            className="btn-primary w-full py-3 text-base disabled:opacity-50"
+          >
+            {loading ? 'Verificando...' : 'Activar y continuar'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (mfaRequired) {
     return (
