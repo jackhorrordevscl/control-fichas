@@ -79,7 +79,7 @@ export class ConsultationsService {
 
     // Solo la versión vigente de cada consulta (correctedBy: null = nadie la corrigió después)
     const consultations = await this.prisma.consultation.findMany({
-      where: { patientId, correctedBy: null },
+      where: { patientId, correctedBy: null, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: THERAPIST_SELECT,
     });
@@ -93,8 +93,8 @@ export class ConsultationsService {
   }
 
   async findOne(id: string, userId: string, userRole: string) {
-    const consultation = await this.prisma.consultation.findUnique({
-      where: { id },
+    const consultation = await this.prisma.consultation.findFirst({
+      where: { id, deletedAt: null },
       include: THERAPIST_SELECT,
     });
     if (!consultation) throw new NotFoundException('Consulta no encontrada');

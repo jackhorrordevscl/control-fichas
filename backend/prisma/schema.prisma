@@ -106,6 +106,10 @@ model Consultation {
   scheduledAt     DateTime
   reminderSent    Boolean     @default(false)
   patientRut      String
+  // Paridad con Patient: ninguna ruta expone un delete físico hoy, pero el
+  // modelo ya queda listo para soft delete si alguna vez se agrega esa
+  // funcionalidad, en vez de tentar a alguien a usar .delete().
+  deletedAt       DateTime?
 
   // Versionado inmutable: corregir una consulta nunca modifica la fila
   // original, crea una fila nueva que apunta correctsId a la anterior.
