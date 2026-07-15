@@ -198,8 +198,10 @@ control-fichas/
 
 ### Backups Automáticos
 - Script de backup diario programado vía cron (2:00 AM)
-- Compresión gzip de los respaldos
-- Retención automática de 30 días
+- Compresión gzip + cifrado AES-256 de los respaldos (nunca se escribe un volcado sin cifrar a disco)
+- Credenciales de base de datos vía `.pgpass`, nunca hardcodeadas en el script
+- Rotación operativa de 30 días **separada** de un archivo de custodia legal mensual que nunca se borra (Ley 20.584: 15 años)
+- Segunda copia local en un dispositivo físico distinto (NAS) — copia offsite real todavía pendiente de definir proveedor
 - Log de ejecución en `backups/backup.log`
 
 ---
@@ -243,7 +245,29 @@ GET /api/v1/reports/patient/:patientId    🔒
 
 ## Configuración de Backups
 
-El script de backup está en `backups/backup.sh`. Para activarlo:
+El script de backup está en `backups/backup.sh`. Antes de activarlo, configurá dos archivos protegidos **fuera del repositorio** (nunca en git):
+
+```bash
+# 1. Credenciales de base de datos
+echo "localhost:5432:umbral_db:umbral_user:TU_PASSWORD" >> ~/.pgpass
+chmod 600 ~/.pgpass
+
+# 2. Frase de cifrado — guardá una copia en un gestor de contraseñas.
+#    Sin ella, los backups cifrados son irrecuperables.
+openssl rand -base64 48 > ~/.umbral_backup_passphrase
+chmod 600 ~/.umbral_backup_passphrase
+```
+
+Variables opcionales (todas tienen un default razonable si no se configuran — ver comentarios al inicio de `backup.sh`):
+
+| Variable | Para qué |
+|---|---|
+| `BACKUP_DIR` | Backups operativos, rotan cada `RETENTION_DAYS` |
+| `ARCHIVE_DIR` | Custodia legal — nunca se borra automáticamente |
+| `NAS_DIR` | Segunda copia local en un dispositivo físico distinto (regla 3-2-1) |
+| `OFFSITE_UPLOAD_CMD` | Hook para subir a un destino offsite real (S3/B2/rclone) — pendiente de definir proveedor |
+
+Activarlo:
 
 ```bash
 chmod +x backups/backup.sh
@@ -258,6 +282,14 @@ Agregar la siguiente línea:
 0 2 * * * /ruta/completa/control-fichas/backups/backup.sh >> /ruta/completa/control-fichas/backups/backup.log 2>&1
 ```
 
+Restaurar un backup:
+
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 -pass file:"$HOME/.umbral_backup_passphrase" \
+  -in umbral_backup_2026-07-15_02-00-00.sql.gz.enc | gunzip | \
+  psql -U umbral_user -h localhost -d umbral_db
+```
+
 ---
 
 ## Cumplimiento Legal
@@ -266,7 +298,7 @@ Agregar la siguiente línea:
 |---|---|
 | Ficha clínica obligatoria | Módulo de pacientes con todos los campos exigidos |
 | Secreto profesional | Datos cifrados en tránsito (HTTPS en producción) |
-| Custodia 15 años | Soft delete + backups automáticos con retención configurable |
+| Custodia 15 años | Soft delete + archivo de custodia legal mensual cifrado que nunca se borra (separado de la rotación operativa de 30 días) |
 | Derecho del paciente a su ficha | Exportación PDF bajo demanda |
 | Inalterabilidad de registros | Versionado en consultas + soft delete en pacientes |
 | Bitácora de accesos | Audit Log inmutable con registro de todas las acciones |
