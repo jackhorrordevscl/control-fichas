@@ -50,7 +50,13 @@ export class DocumentsController {
     @Body('type') type: string,
     @CurrentUser() user: any,
   ) {
-    return this.documentsService.uploadDocument(patientId, user.id, file, type);
+    return this.documentsService.uploadDocument(
+      patientId,
+      user.id,
+      user.role,
+      file,
+      type,
+    );
   }
 
   @Get('patient/:patientId')

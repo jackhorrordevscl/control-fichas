@@ -14,18 +14,18 @@ export class DocumentsService {
   async uploadDocument(
     patientId: string,
     userId: string,
+    userRole: string,
     file: Express.Multer.File,
     type: string,
   ) {
-    // Verifica que el paciente existe
-    const patient = await this.prisma.patient.findUnique({
-      where: { id: patientId },
-    });
-
-    if (!patient) {
-      // Elimina el archivo subido si el paciente no existe
+    try {
+      // Lanza NotFoundException/ForbiddenException si el paciente no existe
+      // o el usuario no tiene acceso a él
+      await this.patientsService.findOne(patientId, userId, userRole);
+    } catch (err) {
+      // Elimina el archivo subido si la validación falla
       fs.unlinkSync(file.path);
-      throw new NotFoundException('Paciente no encontrado');
+      throw err;
     }
 
     return this.prisma.patientDocument.create({
