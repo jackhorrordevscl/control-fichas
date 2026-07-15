@@ -1,5 +1,5 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerGuard, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
@@ -10,11 +10,15 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  // T4.2 (issue #20): rate limiting en login y en mfa/verify. El límite/ventana
-  // real vienen del throttler nombrado 'login' registrado en AuthModule
-  // (buildLoginThrottlerOptions) — no se hardcodea acá para no duplicar la
-  // fuente de verdad ni pelear con el default más alto que se usa en test.
+  // T4.2 (issue #20): rate limiting en login y en mfa/verify, con throttlers
+  // nombrados independientes ('login' / 'mfa-verify', ver buildAuthThrottlerOptions
+  // en AuthModule) para que subir el límite de uno no relaje sin querer el
+  // del otro. @nestjs/throttler aplica TODOS los throttlers registrados a
+  // toda ruta guardada por defecto, así que cada ruta saltea el que no le
+  // corresponde con @SkipThrottle — sin esto, login también consumiría cupo
+  // del throttler 'mfa-verify' (y viceversa) además del propio.
   @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ 'mfa-verify': true })
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
@@ -26,6 +30,7 @@ export class AuthController {
   // fuerza bruta sobre el TOTP de 6 dígitos (window:1, ~3 códigos válidos)
   // emitía un JWT real sin ningún límite de intentos.
   @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ login: true })
   @Post('mfa/verify')
   verifyMfa(@Body() dto: VerifyMfaDto) {
     return this.authService.verifyMfa(dto);

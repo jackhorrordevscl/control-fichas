@@ -28,7 +28,38 @@ import { getLoginTracker } from '../src/modules/auth/auth.module';
  * credenciales son válidas. Por eso ningún test de esta suite necesita un
  * usuario real: el 429 sale igual con cualquier payload una vez agotado el
  * límite.
+ *
+ * login y mfa/verify usan throttlers NOMBRADOS independientes ('login' /
+ * 'mfa-verify', ver buildAuthThrottlerOptions en auth.module.ts), así que
+ * cada describe de abajo override solo el throttler que le corresponde.
  */
+async function createRateLimitTestApp(
+  throttlerName: string,
+  limit: number,
+  ttl: number,
+): Promise<INestApplication<App>> {
+  const moduleFixture: TestingModule = await Test.createTestingModule({
+    imports: [AppModule],
+  })
+    .overrideProvider(getOptionsToken())
+    .useValue({
+      throttlers: [{ name: throttlerName, limit, ttl }],
+    })
+    .compile();
+
+  const app: INestApplication<App> = moduleFixture.createNestApplication();
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  app.setGlobalPrefix('api/v1');
+  await app.init();
+  return app;
+}
+
 describe('Rate limiting en POST /auth/login (e2e)', () => {
   let app: INestApplication<App>;
 
@@ -40,25 +71,7 @@ describe('Rate limiting en POST /auth/login (e2e)', () => {
   const WRONG_PASSWORD = 'WrongPass123!';
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(getOptionsToken())
-      .useValue({
-        throttlers: [{ name: 'login', limit: TEST_LIMIT, ttl: TEST_TTL_MS }],
-      })
-      .compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
-    app.setGlobalPrefix('api/v1');
-    await app.init();
+    app = await createRateLimitTestApp('login', TEST_LIMIT, TEST_TTL_MS);
   });
 
   afterAll(async () => {
@@ -111,25 +124,7 @@ describe('Rate limiting en POST /auth/mfa/verify (e2e)', () => {
   const WRONG_TOKEN = '000000';
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(getOptionsToken())
-      .useValue({
-        throttlers: [{ name: 'login', limit: TEST_LIMIT, ttl: TEST_TTL_MS }],
-      })
-      .compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
-    app.setGlobalPrefix('api/v1');
-    await app.init();
+    app = await createRateLimitTestApp('mfa-verify', TEST_LIMIT, TEST_TTL_MS);
   });
 
   afterAll(async () => {

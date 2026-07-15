@@ -8,10 +8,22 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 /**
- * Config del throttler de POST /auth/login (T4.2, issue #20).
+ * Config de los throttlers de auth (T4.2, issue #20; hallazgo de code
+ * review sobre PR #39: mfa/verify tenía su propio guard pero compartía el
+ * mismo par de env vars que login, así que subir el límite de login por
+ * error también relajaba el presupuesto de fuerza bruta sobre el TOTP).
  *
- * Producción: LOGIN_THROTTLE_LIMIT intentos por LOGIN_THROTTLE_TTL_MS ms
- * (default 5 intentos / 60000ms).
+ * Dos throttlers nombrados e independientes:
+ * - 'login': LOGIN_THROTTLE_LIMIT intentos por LOGIN_THROTTLE_TTL_MS ms
+ *   (default 5 / 60000ms), para POST /auth/login.
+ * - 'mfa-verify': MFA_THROTTLE_LIMIT intentos por MFA_THROTTLE_TTL_MS ms
+ *   (mismos defaults), para POST /auth/mfa/verify.
+ *
+ * @nestjs/throttler aplica POR DEFECTO todos los throttlers registrados a
+ * toda ruta con @UseGuards(ThrottlerGuard) — por eso cada ruta en
+ * auth.controller.ts usa @SkipThrottle() para saltar el throttler que no le
+ * corresponde; sin eso, login también consumiría cupo del throttler
+ * 'mfa-verify' (y viceversa) además del propio.
  *
  * Jest setea NODE_ENV=test automáticamente en toda corrida de test, sin que
  * nadie tenga que configurarlo. Cuando corremos ahí Y las env vars de arriba
@@ -73,18 +85,34 @@ export function getLoginTracker(req: {
   return req.ip;
 }
 
-export function buildLoginThrottlerOptions(
+export function buildAuthThrottlerOptions(
   config: ConfigService,
 ): ThrottlerModuleOptions {
   const isTest = config.get<string>('NODE_ENV') === 'test';
-  const explicitLimit = config.get<string>('LOGIN_THROTTLE_LIMIT');
-  const explicitTtlMs = config.get<string>('LOGIN_THROTTLE_TTL_MS');
 
-  const limit = parsePositiveInt(explicitLimit, isTest ? 1000 : 5);
-  const ttl = parsePositiveInt(explicitTtlMs, 60000);
+  const loginLimit = parsePositiveInt(
+    config.get<string>('LOGIN_THROTTLE_LIMIT'),
+    isTest ? 1000 : 5,
+  );
+  const loginTtl = parsePositiveInt(
+    config.get<string>('LOGIN_THROTTLE_TTL_MS'),
+    60000,
+  );
+
+  const mfaVerifyLimit = parsePositiveInt(
+    config.get<string>('MFA_THROTTLE_LIMIT'),
+    isTest ? 1000 : 5,
+  );
+  const mfaVerifyTtl = parsePositiveInt(
+    config.get<string>('MFA_THROTTLE_TTL_MS'),
+    60000,
+  );
 
   return {
-    throttlers: [{ name: 'login', limit, ttl }],
+    throttlers: [
+      { name: 'login', limit: loginLimit, ttl: loginTtl },
+      { name: 'mfa-verify', limit: mfaVerifyLimit, ttl: mfaVerifyTtl },
+    ],
     getTracker: getLoginTracker,
   };
 }
@@ -103,7 +131,7 @@ export function buildLoginThrottlerOptions(
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: buildLoginThrottlerOptions,
+      useFactory: buildAuthThrottlerOptions,
     }),
   ],
   controllers: [AuthController],
