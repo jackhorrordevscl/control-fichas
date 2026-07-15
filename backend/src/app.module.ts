@@ -11,6 +11,8 @@ import { DocumentsModule } from './modules/documents/documents.module';
 import { UsersModule } from './modules/users/users.module';
 import { SharedFilesModule } from './shared-files/shared-files.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -27,7 +29,9 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     DocumentsModule,
     SharedFilesModule,
   ],
+  controllers: [AppController],
   providers: [
+    AppService,
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,

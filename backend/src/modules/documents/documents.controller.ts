@@ -50,17 +50,30 @@ export class DocumentsController {
     @Body('type') type: string,
     @CurrentUser() user: any,
   ) {
-    return this.documentsService.uploadDocument(patientId, user.id, file, type);
+    return this.documentsService.uploadDocument(
+      patientId,
+      user.id,
+      user.role,
+      file,
+      type,
+    );
   }
 
   @Get('patient/:patientId')
-  findByPatient(@Param('patientId') patientId: string) {
-    return this.documentsService.findByPatient(patientId);
+  findByPatient(
+    @Param('patientId') patientId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.documentsService.findByPatient(patientId, user.id, user.role);
   }
 
   @Get(':id/download')
-  async download(@Param('id') id: string, @Res() res: Response) {
-    const doc = await this.documentsService.getDocument(id);
+  async download(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Res() res: Response,
+  ) {
+    const doc = await this.documentsService.getDocument(id, user.id, user.role);
     const filePath = join(process.cwd(), doc.storagePath);
     res.download(filePath, doc.fileName);
   }
