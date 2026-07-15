@@ -1,4 +1,5 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
@@ -9,6 +10,11 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  // T4.2 (issue #20): rate limiting SOLO en esta ruta. El límite/ventana
+  // real vienen del throttler nombrado 'login' registrado en AuthModule
+  // (buildLoginThrottlerOptions) — no se hardcodea acá para no duplicar la
+  // fuente de verdad ni pelear con el default más alto que se usa en test.
+  @UseGuards(ThrottlerGuard)
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
