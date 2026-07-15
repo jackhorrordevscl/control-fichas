@@ -143,16 +143,23 @@ describe('RBAC ownership guard (e2e)', () => {
         }
       }
 
-      // Borrado respetando FKs: documentos/historial de consultas -> consultas ->
-      // paciente -> usuarios de prueba (el ADMIN seedeado no se toca)
+      // Borrado respetando FKs: documentos/historial de consultas -> consultas -> paciente
       await prisma.patientDocument.deleteMany({ where: { patientId } });
       await prisma.consultationHistory.deleteMany({
         where: { consultation: { patientId } },
       });
       await prisma.consultation.deleteMany({ where: { patientId } });
       await prisma.patient.deleteMany({ where: { id: patientId } });
-      await prisma.user.deleteMany({
+
+      // Los usuarios de prueba ya generaron filas en AuditLog durante la
+      // suite (cada request autenticado audita). AuditLog.userId ahora usa
+      // onDelete: Restrict a propósito (T2.1) para que hard-deletear un
+      // usuario con historial de auditoría sea imposible — igual que en
+      // producción, donde no existe ningún prisma.user.delete(), solo
+      // soft delete. Se limpia acá de la misma forma.
+      await prisma.user.updateMany({
         where: { id: { in: [therapistAId, therapistBId] } },
+        data: { deletedAt: new Date() },
       });
     } finally {
       await app.close();
@@ -316,7 +323,9 @@ describe('RBAC ownership guard (e2e)', () => {
     });
   });
 
-  describe('PATCH /consultations/:id/correct', () => {
+  describe('PATCH /consultations/:id/correct (versionado inmutable, T2.3)', () => {
+    let correctedId: string;
+
     it('un terapeuta sin relación con el paciente recibe 403', () => {
       return request(app.getHttpServer())
         .patch(`/api/v1/consultations/${consultationId}/correct`)
@@ -325,17 +334,41 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
 
-    it('el terapeuta dueño puede corregir (2xx)', () => {
-      return request(app.getHttpServer())
+    it('el terapeuta dueño puede corregir: crea una versión nueva (2xx)', async () => {
+      const res = await request(app.getHttpServer())
         .patch(`/api/v1/consultations/${consultationId}/correct`)
         .set('Authorization', `Bearer ${therapistAToken}`)
         .send({ consultReason: 'Motivo corregido por el dueño' })
         .expect(200);
+
+      correctedId = res.body.id;
+      expect(correctedId).toBeDefined();
+      expect(correctedId).not.toBe(consultationId);
+      expect(res.body.consultReason).toBe('Motivo corregido por el dueño');
+      expect(res.body.history.length).toBe(1);
     });
 
-    it('ADMIN puede corregir sin restricción (2xx)', () => {
+    it('la versión original queda intacta y consultable por su id original', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/consultations/${consultationId}`)
+        .set('Authorization', `Bearer ${therapistAToken}`)
+        .expect(200);
+
+      expect(res.body.id).toBe(consultationId);
+      expect(res.body.consultReason).toBe('Motivo de prueba RBAC');
+    });
+
+    it('corregir la versión original ya superada devuelve 409', () => {
       return request(app.getHttpServer())
         .patch(`/api/v1/consultations/${consultationId}/correct`)
+        .set('Authorization', `Bearer ${therapistAToken}`)
+        .send({ consultReason: 'Intento sobre versión vieja' })
+        .expect(409);
+    });
+
+    it('ADMIN puede corregir la versión vigente sin restricción (2xx)', () => {
+      return request(app.getHttpServer())
+        .patch(`/api/v1/consultations/${correctedId}/correct`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ consultReason: 'Motivo corregido por ADMIN' })
         .expect(200);

@@ -89,6 +89,9 @@ enum DocumentType {
 
 model Consultation {
   id              String      @id @default(uuid())
+  // Comparte el mismo valor entre todas las versiones (original + correcciones)
+  // de una misma consulta clínica. En la primera versión, groupId === id.
+  groupId         String
   patientId       String
   patient         Patient     @relation(fields: [patientId], references: [id])
   therapistId     String
@@ -103,8 +106,20 @@ model Consultation {
   scheduledAt     DateTime
   reminderSent    Boolean     @default(false)
   patientRut      String
+  // Paridad con Patient: ninguna ruta expone un delete físico hoy, pero el
+  // modelo ya queda listo para soft delete si alguna vez se agrega esa
+  // funcionalidad, en vez de tentar a alguien a usar .delete().
+  deletedAt       DateTime?
+
+  // Versionado inmutable: corregir una consulta nunca modifica la fila
+  // original, crea una fila nueva que apunta correctsId a la anterior.
+  correctsId      String?       @unique
+  corrects        Consultation? @relation("ConsultationVersion", fields: [correctsId], references: [id])
+  correctedBy     Consultation? @relation("ConsultationVersion")
 
   history         ConsultationHistory[]
+
+  @@index([groupId])
 }
 
 enum SessionType {
@@ -115,7 +130,7 @@ enum SessionType {
 model AuditLog {
   id         String      @id @default(uuid())
   userId     String?
-  user       User?       @relation(fields: [userId], references: [id])
+  user       User?       @relation(fields: [userId], references: [id], onDelete: Restrict)
   action     AuditAction
   resource   String
   resourceId String

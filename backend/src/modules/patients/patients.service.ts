@@ -52,7 +52,13 @@ export class PatientsService {
       where: { id, deletedAt: null },
       include: {
         therapist: { select: { id: true, name: true } },
-        consultations: { orderBy: { createdAt: 'desc' } },
+        // Solo la versión vigente de cada consulta (T2.3: corregir crea una
+        // fila nueva en vez de sobrescribir, así que hay que excluir las
+        // versiones ya superadas para no listar la misma consulta dos veces)
+        consultations: {
+          where: { correctedBy: null, deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+        },
         documents: true,
       },
     });
