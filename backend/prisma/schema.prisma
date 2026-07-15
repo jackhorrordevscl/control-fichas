@@ -89,6 +89,9 @@ enum DocumentType {
 
 model Consultation {
   id              String      @id @default(uuid())
+  // Comparte el mismo valor entre todas las versiones (original + correcciones)
+  // de una misma consulta clínica. En la primera versión, groupId === id.
+  groupId         String
   patientId       String
   patient         Patient     @relation(fields: [patientId], references: [id])
   therapistId     String
@@ -104,7 +107,15 @@ model Consultation {
   reminderSent    Boolean     @default(false)
   patientRut      String
 
+  // Versionado inmutable: corregir una consulta nunca modifica la fila
+  // original, crea una fila nueva que apunta correctsId a la anterior.
+  correctsId      String?       @unique
+  corrects        Consultation? @relation("ConsultationVersion", fields: [correctsId], references: [id])
+  correctedBy     Consultation? @relation("ConsultationVersion")
+
   history         ConsultationHistory[]
+
+  @@index([groupId])
 }
 
 enum SessionType {

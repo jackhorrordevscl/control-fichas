@@ -21,7 +21,10 @@ export class ReportsService {
     const patient = await this.prisma.patient.findUnique({
       where: { id: patientId },
       include: {
+        // Solo la versión vigente de cada consulta (T2.3: corregir crea una
+        // fila nueva, hay que excluir las versiones ya superadas)
         consultations: {
+          where: { correctedBy: null },
           orderBy: { createdAt: 'asc' },
         },
         therapist: {

@@ -323,7 +323,9 @@ describe('RBAC ownership guard (e2e)', () => {
     });
   });
 
-  describe('PATCH /consultations/:id/correct', () => {
+  describe('PATCH /consultations/:id/correct (versionado inmutable, T2.3)', () => {
+    let correctedId: string;
+
     it('un terapeuta sin relación con el paciente recibe 403', () => {
       return request(app.getHttpServer())
         .patch(`/api/v1/consultations/${consultationId}/correct`)
@@ -332,17 +334,41 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
 
-    it('el terapeuta dueño puede corregir (2xx)', () => {
-      return request(app.getHttpServer())
+    it('el terapeuta dueño puede corregir: crea una versión nueva (2xx)', async () => {
+      const res = await request(app.getHttpServer())
         .patch(`/api/v1/consultations/${consultationId}/correct`)
         .set('Authorization', `Bearer ${therapistAToken}`)
         .send({ consultReason: 'Motivo corregido por el dueño' })
         .expect(200);
+
+      correctedId = res.body.id;
+      expect(correctedId).toBeDefined();
+      expect(correctedId).not.toBe(consultationId);
+      expect(res.body.consultReason).toBe('Motivo corregido por el dueño');
+      expect(res.body.history.length).toBe(1);
     });
 
-    it('ADMIN puede corregir sin restricción (2xx)', () => {
+    it('la versión original queda intacta y consultable por su id original', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/consultations/${consultationId}`)
+        .set('Authorization', `Bearer ${therapistAToken}`)
+        .expect(200);
+
+      expect(res.body.id).toBe(consultationId);
+      expect(res.body.consultReason).toBe('Motivo de prueba RBAC');
+    });
+
+    it('corregir la versión original ya superada devuelve 409', () => {
       return request(app.getHttpServer())
         .patch(`/api/v1/consultations/${consultationId}/correct`)
+        .set('Authorization', `Bearer ${therapistAToken}`)
+        .send({ consultReason: 'Intento sobre versión vieja' })
+        .expect(409);
+    });
+
+    it('ADMIN puede corregir la versión vigente sin restricción (2xx)', () => {
+      return request(app.getHttpServer())
+        .patch(`/api/v1/consultations/${correctedId}/correct`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ consultReason: 'Motivo corregido por ADMIN' })
         .expect(200);
