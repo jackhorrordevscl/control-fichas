@@ -122,6 +122,66 @@ describe('Rate limiting en POST /auth/login (e2e)', () => {
 });
 
 /**
+ * T4.2 (issue #20, hallazgo de code review): POST /auth/mfa/verify también
+ * responde 429 al superar el límite. Esta ruta es el segundo paso del login
+ * (se llama sin JWT, con userId + código TOTP), por eso no puede llevar
+ * JwtAuthGuard — antes de este fix no tenía ningún guard, y permitía fuerza
+ * bruta ilimitada sobre el TOTP de 6 dígitos de cualquier userId conocido.
+ */
+describe('Rate limiting en POST /auth/mfa/verify (e2e)', () => {
+  let app: INestApplication<App>;
+
+  const TEST_LIMIT = 3;
+  const TEST_TTL_MS = 60000;
+
+  const runId = Date.now();
+  const UNKNOWN_USER_ID = `00000000-0000-4000-8000-${String(runId).padStart(12, '0')}`;
+  const WRONG_TOKEN = '000000';
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(getOptionsToken())
+      .useValue({
+        throttlers: [{ name: 'login', limit: TEST_LIMIT, ttl: TEST_TTL_MS }],
+      })
+      .compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+    app.setGlobalPrefix('api/v1');
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it(`permite hasta ${TEST_LIMIT} intentos con userId/token inválidos (401)`, async () => {
+    for (let i = 0; i < TEST_LIMIT; i++) {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/mfa/verify')
+        .send({ userId: UNKNOWN_USER_ID, token: WRONG_TOKEN })
+        .expect(401);
+    }
+  });
+
+  it(`el intento número ${TEST_LIMIT + 1} contra la ruta responde 429`, async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/mfa/verify')
+      .send({ userId: UNKNOWN_USER_ID, token: WRONG_TOKEN })
+      .expect(429);
+  });
+});
+
+/**
  * getLoginTracker decide contra qué IP se cuenta el límite de intentos.
  * X-Forwarded-For es una lista que cada proxy AGREGA al final: el primer
  * valor lo pone el cliente (falsificable por cualquiera que arme el request

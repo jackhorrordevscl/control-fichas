@@ -10,7 +10,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  // T4.2 (issue #20): rate limiting SOLO en esta ruta. El límite/ventana
+  // T4.2 (issue #20): rate limiting en login y en mfa/verify. El límite/ventana
   // real vienen del throttler nombrado 'login' registrado en AuthModule
   // (buildLoginThrottlerOptions) — no se hardcodea acá para no duplicar la
   // fuente de verdad ni pelear con el default más alto que se usa en test.
@@ -20,6 +20,12 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  // mfa/verify no puede llevar JwtAuthGuard: es el segundo paso del login
+  // (login devuelve requiresMfa + userId antes de emitir ningún JWT), así que
+  // por diseño se llama sin sesión. Sin throttling acá, un userId conocido +
+  // fuerza bruta sobre el TOTP de 6 dígitos (window:1, ~3 códigos válidos)
+  // emitía un JWT real sin ningún límite de intentos.
+  @UseGuards(ThrottlerGuard)
   @Post('mfa/verify')
   verifyMfa(@Body() dto: VerifyMfaDto) {
     return this.authService.verifyMfa(dto);
