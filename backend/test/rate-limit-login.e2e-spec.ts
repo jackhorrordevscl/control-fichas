@@ -2,10 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import * as argon2 from 'argon2';
 import { getOptionsToken } from '@nestjs/throttler';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
 import { getLoginTracker } from '../src/modules/auth/auth.module';
 
 /**
@@ -25,12 +23,14 @@ import { getLoginTracker } from '../src/modules/auth/auth.module';
  * ThrottlerStorageService, así que el contador de esta suite nunca se
  * mezcla con el de otro archivo de test.
  *
- * El usuario de prueba se crea directo por Prisma (no vía login admin) para
- * no depender en absoluto del estado de admin@umbral.cl.
+ * ThrottlerGuard corre en la fase de Guards de Nest, antes que cualquier
+ * ValidationPipe o el AuthService — nunca llega a evaluar si las
+ * credenciales son válidas. Por eso ningún test de esta suite necesita un
+ * usuario real: el 429 sale igual con cualquier payload una vez agotado el
+ * límite.
  */
 describe('Rate limiting en POST /auth/login (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
 
   const TEST_LIMIT = 3;
   const TEST_TTL_MS = 60000;
@@ -38,10 +38,6 @@ describe('Rate limiting en POST /auth/login (e2e)', () => {
   const runId = Date.now();
   const UNKNOWN_EMAIL = `rate-limit.unknown.${runId}@umbral.cl`;
   const WRONG_PASSWORD = 'WrongPass123!';
-
-  const REAL_EMAIL = `rate-limit.test.${runId}@umbral.cl`;
-  const REAL_PASSWORD = 'RateLimitTest123!';
-  let realUserId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -63,34 +59,10 @@ describe('Rate limiting en POST /auth/login (e2e)', () => {
     );
     app.setGlobalPrefix('api/v1');
     await app.init();
-
-    prisma = app.get(PrismaService);
-
-    const passwordHash = await argon2.hash(REAL_PASSWORD);
-    const realUser = await prisma.user.create({
-      data: {
-        email: REAL_EMAIL,
-        passwordHash,
-        name: 'Rate Limit Test User',
-        role: 'THERAPIST',
-      },
-    });
-    realUserId = realUser.id;
   });
 
   afterAll(async () => {
-    try {
-      // Guard explícito: si beforeAll falla antes de asignar realUserId,
-      // `where: { id: undefined }` en Prisma no significa "no matchear
-      // nada" — significa "sin filtro en ese campo", así que deleteMany()
-      // borraría toda la tabla User. No hay DB de test separada todavía,
-      // así que esto pega directo contra la base real compartida.
-      if (realUserId) {
-        await prisma.user.deleteMany({ where: { id: realUserId } });
-      }
-    } finally {
-      await app.close();
-    }
+    await app.close();
   });
 
   it(`permite hasta ${TEST_LIMIT} intentos fallidos (401 por credenciales inválidas)`, async () => {
@@ -109,14 +81,14 @@ describe('Rate limiting en POST /auth/login (e2e)', () => {
       .expect(429);
   });
 
-  it('un login con credenciales válidas también cuenta contra el límite ya superado (429, no 200/201)', async () => {
+  it('cualquier intento adicional también cuenta contra el límite ya superado (429, no 401)', async () => {
     // El límite ya se agotó en los tests anteriores dentro de la misma
-    // ventana. @nestjs/throttler cuenta todos los requests a la ruta, no
-    // solo los fallidos, así que un login legítimo también debe recibir
-    // 429 en vez de autenticar.
+    // ventana. @nestjs/throttler cuenta todos los requests a la ruta antes
+    // de que el Guard deje pasar al AuthService, así que ni siquiera
+    // importa si el payload sería válido — el resultado es 429 igual.
     await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: REAL_EMAIL, password: REAL_PASSWORD })
+      .send({ email: UNKNOWN_EMAIL, password: WRONG_PASSWORD })
       .expect(429);
   });
 });
