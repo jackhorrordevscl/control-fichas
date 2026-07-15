@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import * as fs from 'fs';
+import * as speakeasy from 'speakeasy';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -56,12 +57,40 @@ describe('RBAC ownership guard (e2e)', () => {
 
     prisma = app.get(PrismaService);
 
-    // 1. Login como ADMIN seedeado
+    // T4.1 (issue #19): ADMIN/DIRECTOR quedan forzados a enrolar MFA en su
+    // primer login sin MFA. Se resetea el estado MFA del ADMIN seedeado
+    // antes de loguear para que esta suite sea determinística sin importar
+    // si una corrida previa ya completó el enrolamiento forzado (la
+    // cobertura completa de ese flujo vive en
+    // auth-mfa-enforcement.e2e-spec.ts).
+    await prisma.user.updateMany({
+      where: { email: ADMIN_EMAIL },
+      data: { mfaEnabled: false, mfaSecret: null },
+    });
+
+    // 1. Login como ADMIN seedeado: al ser ADMIN sin MFA, el backend
+    // entrega un setupToken de enrolamiento forzado en vez de accessToken.
     const adminLogin = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
       .expect(201);
-    adminToken = adminLogin.body.accessToken;
+    expect(adminLogin.body.requiresMfaSetup).toBe(true);
+
+    const beginSetup = await request(app.getHttpServer())
+      .post('/api/v1/auth/mfa/setup/begin')
+      .send({ setupToken: adminLogin.body.setupToken })
+      .expect(201);
+
+    const adminTotp = speakeasy.totp({
+      secret: beginSetup.body.secret,
+      encoding: 'base32',
+    });
+
+    const confirmSetup = await request(app.getHttpServer())
+      .post('/api/v1/auth/mfa/setup/confirm')
+      .send({ setupToken: adminLogin.body.setupToken, token: adminTotp })
+      .expect(201);
+    adminToken = confirmSetup.body.accessToken;
 
     // 2. Crear dos usuarios THERAPIST de prueba con emails únicos
     const therapistAEmail = `rbac.therapist.a.${runId}@umbral.cl`;
@@ -131,36 +160,52 @@ describe('RBAC ownership guard (e2e)', () => {
 
   afterAll(async () => {
     try {
-      // Limpieza de archivos físicos subidos durante la suite
-      const docs = await prisma.patientDocument.findMany({
-        where: { patientId },
-      });
-      for (const doc of docs) {
-        try {
-          fs.unlinkSync(doc.storagePath);
-        } catch {
-          // el archivo puede no existir (p.ej. intento no-dueño ya autolimpiado); se ignora
+      // Guard explícito: si beforeAll falló antes de crear el paciente
+      // fixture, patientId queda undefined. `where: { patientId: undefined }`
+      // / `where: { id: undefined }` en Prisma NO filtra por "ningún match":
+      // significa "sin filtro en ese campo", así que deleteMany() borraría
+      // TODOS los pacientes/documentos/consultas de la base. El flujo de
+      // login del ADMIN seedeado ahora hace varias llamadas HTTP más (T4.1,
+      // issue #19: enrolamiento MFA forzado), lo que aumenta la superficie
+      // para que beforeAll falle a mitad de camino, así que este guard es
+      // necesario, no solo defensivo.
+      if (patientId) {
+        // Limpieza de archivos físicos subidos durante la suite
+        const docs = await prisma.patientDocument.findMany({
+          where: { patientId },
+        });
+        for (const doc of docs) {
+          try {
+            fs.unlinkSync(doc.storagePath);
+          } catch {
+            // el archivo puede no existir (p.ej. intento no-dueño ya autolimpiado); se ignora
+          }
         }
-      }
 
-      // Borrado respetando FKs: documentos/historial de consultas -> consultas -> paciente
-      await prisma.patientDocument.deleteMany({ where: { patientId } });
-      await prisma.consultationHistory.deleteMany({
-        where: { consultation: { patientId } },
-      });
-      await prisma.consultation.deleteMany({ where: { patientId } });
-      await prisma.patient.deleteMany({ where: { id: patientId } });
+        // Borrado respetando FKs: documentos/historial de consultas -> consultas -> paciente
+        await prisma.patientDocument.deleteMany({ where: { patientId } });
+        await prisma.consultationHistory.deleteMany({
+          where: { consultation: { patientId } },
+        });
+        await prisma.consultation.deleteMany({ where: { patientId } });
+        await prisma.patient.deleteMany({ where: { id: patientId } });
+      }
 
       // Los usuarios de prueba ya generaron filas en AuditLog durante la
       // suite (cada request autenticado audita). AuditLog.userId ahora usa
       // onDelete: Restrict a propósito (T2.1) para que hard-deletear un
       // usuario con historial de auditoría sea imposible — igual que en
       // producción, donde no existe ningún prisma.user.delete(), solo
-      // soft delete. Se limpia acá de la misma forma.
-      await prisma.user.updateMany({
-        where: { id: { in: [therapistAId, therapistBId] } },
-        data: { deletedAt: new Date() },
-      });
+      // soft delete. Se limpia acá de la misma forma. `in: []` cuando ambos
+      // ids quedan undefined no matchea nada (a diferencia de `id: undefined`
+      // suelto), así que este filtro ya era seguro.
+      const idsToSoftDelete = [therapistAId, therapistBId].filter(Boolean);
+      if (idsToSoftDelete.length > 0) {
+        await prisma.user.updateMany({
+          where: { id: { in: idsToSoftDelete } },
+          data: { deletedAt: new Date() },
+        });
+      }
     } finally {
       await app.close();
     }

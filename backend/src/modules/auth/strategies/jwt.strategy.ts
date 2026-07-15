@@ -17,7 +17,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 });
   }
 
-  async validate(payload: { sub: string; email: string; role: string}) {
+  async validate(payload: { sub: string; email: string; role: string; purpose?: string }) {
+    // Los JWT de corta duración emitidos para forzar el enrolamiento MFA
+    // (purpose: 'mfa-setup', ver AuthService.login/verifySetupToken) NUNCA
+    // deben aceptarse como Bearer token de sesión: solo sirven para los
+    // endpoints /auth/mfa/setup/begin y /auth/mfa/setup/confirm, que los
+    // verifican manualmente con jwtService.verify. Sin este chequeo, ese
+    // token de 10 minutos podría usarse para acceder a cualquier ruta
+    // protegida por JwtAuthGuard.
+    if (payload.purpose === 'mfa-setup') {
+      throw new UnauthorizedException('Token no autorizado para esta operación');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
     });
