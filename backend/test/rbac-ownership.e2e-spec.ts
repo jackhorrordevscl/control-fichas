@@ -143,16 +143,23 @@ describe('RBAC ownership guard (e2e)', () => {
         }
       }
 
-      // Borrado respetando FKs: documentos/historial de consultas -> consultas ->
-      // paciente -> usuarios de prueba (el ADMIN seedeado no se toca)
+      // Borrado respetando FKs: documentos/historial de consultas -> consultas -> paciente
       await prisma.patientDocument.deleteMany({ where: { patientId } });
       await prisma.consultationHistory.deleteMany({
         where: { consultation: { patientId } },
       });
       await prisma.consultation.deleteMany({ where: { patientId } });
       await prisma.patient.deleteMany({ where: { id: patientId } });
-      await prisma.user.deleteMany({
+
+      // Los usuarios de prueba ya generaron filas en AuditLog durante la
+      // suite (cada request autenticado audita). AuditLog.userId ahora usa
+      // onDelete: Restrict a propósito (T2.1) para que hard-deletear un
+      // usuario con historial de auditoría sea imposible — igual que en
+      // producción, donde no existe ningún prisma.user.delete(), solo
+      // soft delete. Se limpia acá de la misma forma.
+      await prisma.user.updateMany({
         where: { id: { in: [therapistAId, therapistBId] } },
+        data: { deletedAt: new Date() },
       });
     } finally {
       await app.close();
