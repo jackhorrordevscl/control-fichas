@@ -42,30 +42,55 @@ export default function LoginPage() {
   const [setupToken, setSetupToken] = useState('');
   const [setupQrCode, setSetupQrCode] = useState('');
   const [setupMfaCode, setSetupMfaCode] = useState('');
+  const [passwordChangeRequired, setPasswordChangeRequired] = useState(false);
+  const [passwordChangeToken, setPasswordChangeToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
+
+  // Compartido entre login() y password/change: ambos pueden devolver
+  // requiresMfa, requiresMfaSetup o accessToken (ver AuthService.completeLogin
+  // en el backend) — es la misma decisión post-credenciales en los dos casos.
+  const handleLoginResult = (data: {
+    requiresMfa?: boolean;
+    userId?: string;
+    requiresMfaSetup?: boolean;
+    setupToken?: string;
+    accessToken?: string;
+    user?: { id: string; email: string; role: string; name: string };
+  }) => {
+    if (data.requiresMfa) {
+      setMfaRequired(true);
+      setUserId(data.userId ?? '');
+    } else if (data.requiresMfaSetup) {
+      // Rol administrativo sin MFA: el backend no entrega accessToken,
+      // solo un setupToken de corta duración. Se arranca el enrolamiento
+      // automáticamente para traer el QR y no dejar al usuario con una
+      // sesión activa sin MFA.
+      setMfaSetupRequired(true);
+      setSetupToken(data.setupToken ?? '');
+      void beginMfaSetup(data.setupToken ?? '');
+    } else if (data.accessToken && data.user) {
+      login(data.accessToken, data.user);
+      navigate('/dashboard');
+    }
+  };
 
   const onSubmit = async (data: LoginForm) => {
     setLoading(true);
     setError('');
     try {
       const res = await api.post('/auth/login', data);
-      if (res.data.requiresMfa) {
-        setMfaRequired(true);
-        setUserId(res.data.userId);
-      } else if (res.data.requiresMfaSetup) {
-        // Rol administrativo sin MFA: el backend no entrega accessToken,
-        // solo un setupToken de corta duración. Se arranca el enrolamiento
-        // automáticamente para traer el QR y no dejar al usuario con una
-        // sesión activa sin MFA.
-        setMfaSetupRequired(true);
-        setSetupToken(res.data.setupToken);
-        await beginMfaSetup(res.data.setupToken);
-      } else if (res.data.accessToken) {
-        login(res.data.accessToken, res.data.user);
-        navigate('/dashboard');
+      if (res.data.requiresPasswordChange) {
+        // Contraseña semilla conocida (ej. admin@umbral.cl / Umbral2024!):
+        // el backend no entrega accessToken ni deja enrolar MFA hasta que
+        // se cambie. Ver T4.4 (issue #22).
+        setPasswordChangeRequired(true);
+        setPasswordChangeToken(res.data.passwordChangeToken);
+      } else {
+        handleLoginResult(res.data);
       }
     } catch (error) {
       setError(
@@ -74,6 +99,22 @@ export default function LoginPage() {
           'Credenciales inválidas. Verifica tu email y contraseña.',
         ),
       );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onPasswordChangeSubmit = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/password/change', {
+        passwordChangeToken,
+        newPassword,
+      });
+      handleLoginResult(res.data);
+    } catch (error) {
+      setError(getApiErrorMessage(error, 'No se pudo cambiar la contraseña.'));
     } finally {
       setLoading(false);
     }
@@ -118,6 +159,39 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  if (passwordChangeRequired) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-8">
+        <div className="bg-cream-50 rounded-2xl p-8 w-full max-w-md">
+          <h2 className="font-display text-3xl text-slate-900 mb-2">Cambio de contraseña requerido</h2>
+          <p className="text-slate-500 text-sm mb-6">
+            Esta cuenta todavía usa la contraseña inicial. Elegí una nueva contraseña para continuar.
+          </p>
+          <input
+            type="password"
+            placeholder="Nueva contraseña"
+            minLength={8}
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            className="input-field mb-4"
+          />
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )}
+          <button
+            onClick={onPasswordChangeSubmit}
+            disabled={loading || newPassword.length < 8}
+            className="btn-primary w-full py-3 text-base disabled:opacity-50"
+          >
+            {loading ? 'Cambiando...' : 'Cambiar contraseña y continuar'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (mfaSetupRequired) {
     return (

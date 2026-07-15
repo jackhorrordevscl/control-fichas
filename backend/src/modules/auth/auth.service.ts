@@ -3,10 +3,11 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import * as argon2 from 'argon2';
 import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
-import { Role } from '@prisma/client';
+import { Role, User } from '@prisma/client';
 
 // Roles administrativos: no pueden operar sin MFA (T4.1 / issue #19).
 const MFA_REQUIRED_ROLES: Role[] = [Role.ADMIN, Role.DIRECTOR];
@@ -14,6 +15,11 @@ const MFA_REQUIRED_ROLES: Role[] = [Role.ADMIN, Role.DIRECTOR];
 // Purpose que llevan los JWT de corta duración emitidos para forzar el
 // enrolamiento MFA. Nunca deben aceptarse como sesión (ver jwt.strategy.ts).
 const MFA_SETUP_PURPOSE = 'mfa-setup';
+
+// Idem para el cambio de contraseña forzado (T4.4 / issue #22): el admin
+// semilla (y cualquier cuenta creada con mustChangePassword=true) no puede
+// operar con la contraseña semilla conocida hasta cambiarla.
+const PASSWORD_CHANGE_PURPOSE = 'password-change';
 
 @Injectable()
 export class AuthService {
@@ -36,6 +42,32 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
+    if (user.mustChangePassword) {
+      // Se verifica ANTES que MFA a propósito: no tiene sentido enrolar MFA
+      // sobre una contraseña semilla conocida por cualquiera que haya leído
+      // seed.ts o el repo (público). Ningún token de sesión ni de enrolamiento
+      // MFA se emite hasta que la contraseña cambie.
+      const passwordChangeToken = this.jwtService.sign(
+        { sub: user.id, purpose: PASSWORD_CHANGE_PURPOSE },
+        { expiresIn: '10m' },
+      );
+      return {
+        requiresPasswordChange: true,
+        passwordChangeToken,
+      };
+    }
+
+    return this.completeLogin(user);
+  }
+
+  /**
+   * Continuación común de login() y changePassword(): decide si el usuario
+   * necesita MFA (ya enrolado, o enrolamiento forzado) o si recibe un
+   * accessToken directo. Separado en su propio método porque changePassword
+   * necesita exactamente esta misma decisión después de actualizar la
+   * contraseña, sin repetir la lógica de MFA.
+   */
+  private completeLogin(user: User) {
     if (user.mfaEnabled) {
       return {
         requiresMfa: true,
@@ -62,6 +94,64 @@ export class AuthService {
     }
 
     return this.generateToken(user);
+  }
+
+  /**
+   * Cambio de contraseña forzado (T4.4, issue #22) para cuentas con
+   * mustChangePassword=true (el admin semilla, u otra cuenta marcada así).
+   * Recibe el passwordChangeToken de corta duración emitido por login(),
+   * nunca un userId crudo ni la contraseña anterior — el token YA probó que
+   * quien llama conoce la contraseña semilla (login la verificó para
+   * emitirlo). Termina en el mismo flujo que un login exitoso
+   * (completeLogin), sin volver a pedir credenciales.
+   */
+  async changePassword(dto: ChangePasswordDto) {
+    const payload = this.verifyPasswordChangeToken(dto.passwordChangeToken);
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || user.deletedAt) {
+      throw new UnauthorizedException('Usuario no válido');
+    }
+
+    // Un passwordChangeToken es un JWT sin estado, válido hasta que expira
+    // (10 min). Sin este chequeo, un token filtrado (logs, proxies) seguiría
+    // sirviendo para volver a cambiar la contraseña — y tomar la cuenta —
+    // aunque el cambio legítimo ya hubiera terminado. Mismo patrón que
+    // rejectIfAlreadyEnrolled para el replay del setupToken de MFA.
+    if (!user.mustChangePassword) {
+      throw new UnauthorizedException('La contraseña ya fue actualizada anteriormente');
+    }
+
+    const newPasswordHash = await argon2.hash(dto.newPassword);
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newPasswordHash, mustChangePassword: false },
+    });
+
+    return this.completeLogin(updated);
+  }
+
+  /**
+   * Verifica un passwordChangeToken: firma válida, no expirado, y
+   * purpose === 'password-change'. jwt.strategy.ts además impide que este
+   * mismo token se use como Bearer token de sesión en cualquier otra ruta.
+   */
+  private verifyPasswordChangeToken(passwordChangeToken: string): {
+    sub: string;
+    purpose?: string;
+  } {
+    let payload: { sub: string; purpose?: string };
+    try {
+      payload = this.jwtService.verify(passwordChangeToken);
+    } catch {
+      throw new UnauthorizedException('Token de cambio de contraseña inválido o expirado');
+    }
+
+    if (payload.purpose !== PASSWORD_CHANGE_PURPOSE) {
+      throw new UnauthorizedException('Token de cambio de contraseña inválido');
+    }
+
+    return payload;
   }
 
   /**
