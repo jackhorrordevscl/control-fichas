@@ -21,7 +21,6 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
-    "@nestjs/cli": "^11.0.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.0.1",
@@ -29,9 +28,8 @@
     "@nestjs/mapped-types": "^2.1.0",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
-    "@nestjs/schematics": "^11.0.0",
     "@nestjs/throttler": "^6.5.0",
-    "@prisma/client": "^6.19.2",
+    "@prisma/client": "^6.19.3",
     "@types/multer": "^2.0.0",
     "argon2": "^0.44.0",
     "class-transformer": "^0.5.1",
@@ -46,12 +44,13 @@
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "speakeasy": "^2.0.0",
-    "ts-loader": "^9.5.2"
+    "speakeasy": "^2.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
