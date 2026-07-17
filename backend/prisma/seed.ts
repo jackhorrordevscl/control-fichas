@@ -17,6 +17,7 @@ async function main() {
       name: 'Administrador Umbral',
       role: 'ADMIN',
       mfaEnabled: false,
+      mustChangePassword: true,
     },
   });
 

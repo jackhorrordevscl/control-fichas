@@ -5,6 +5,7 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { MfaSetupBeginDto } from './dto/mfa-setup-begin.dto';
 import { MfaSetupConfirmDto } from './dto/mfa-setup-confirm.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -51,6 +52,15 @@ export class AuthController {
   @Post('mfa/setup/confirm')
   confirmMfaSetup(@Body() dto: MfaSetupConfirmDto) {
     return this.authService.confirmMfaSetup(dto.setupToken, dto.token);
+  }
+
+  // T4.4 (issue #22): sin JwtAuthGuard por el mismo motivo que mfa/setup/*:
+  // el usuario todavía no tiene sesión (login le negó el accessToken por
+  // mustChangePassword=true). El passwordChangeToken firmado es lo que
+  // protege esta ruta, no el guard.
+  @Post('password/change')
+  changePassword(@Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(dto);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -69,11 +69,13 @@ describe('MFA enforcement para roles administrativos (e2e)', () => {
 
     prisma = app.get(PrismaService);
 
-    // Se resetea el estado MFA del ADMIN seedeado para que esta suite sea
-    // determinística sin importar corridas previas.
+    // Se resetea el estado MFA y mustChangePassword del ADMIN seedeado para
+    // que esta suite sea determinística sin importar corridas previas — esta
+    // suite prueba el enrolamiento MFA forzado (T4.1), no el cambio de
+    // contraseña forzado (T4.4, ver auth-force-password-change.e2e-spec.ts).
     await prisma.user.updateMany({
       where: { email: ADMIN_EMAIL },
-      data: { mfaEnabled: false, mfaSecret: null },
+      data: { mfaEnabled: false, mfaSecret: null, mustChangePassword: false },
     });
 
     // Se necesita un accessToken de ADMIN para crear el fixture THERAPIST

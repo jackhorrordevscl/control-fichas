@@ -65,7 +65,7 @@ describe('RBAC ownership guard (e2e)', () => {
     // auth-mfa-enforcement.e2e-spec.ts).
     await prisma.user.updateMany({
       where: { email: ADMIN_EMAIL },
-      data: { mfaEnabled: false, mfaSecret: null },
+      data: { mfaEnabled: false, mfaSecret: null, mustChangePassword: false },
     });
 
     // 1. Login como ADMIN seedeado: al ser ADMIN sin MFA, el backend
