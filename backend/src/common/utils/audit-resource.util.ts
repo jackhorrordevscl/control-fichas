@@ -1,4 +1,5 @@
 export function getResourceFromUrl(url: string): string {
+  if (url.includes('/consents')) return 'PatientConsent';
   if (url.includes('/patients')) return 'Patient';
   if (url.includes('/consultations')) return 'Consultation';
   if (url.includes('/reports')) return 'Report';

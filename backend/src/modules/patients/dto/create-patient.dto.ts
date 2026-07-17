@@ -3,7 +3,6 @@ import {
   IsEmail,
   IsOptional,
   IsDateString,
-  IsBoolean,
 } from 'class-validator';
 
 export class CreatePatientDto {
@@ -47,12 +46,4 @@ export class CreatePatientDto {
   @IsOptional()
   @IsString()
   treatingDoctor?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  consentSigned?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  telemedConsentSigned?: boolean;
 };
