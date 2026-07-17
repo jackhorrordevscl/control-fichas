@@ -33,6 +33,7 @@ model User {
   patientEdits  PatientHistory[] @relation("PatientEdits")
   sharedFiles   SharedFile[] @relation("UploadedFiles")
   consultationEdits ConsultationHistory[] @relation("ConsultationEdits")
+  patientConsentEvents PatientConsent[] @relation("PatientConsentEvents")
 }
 
 enum Role {
@@ -59,8 +60,6 @@ model Patient {
   deletedAt             DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
-  consentSigned         Boolean   @default(false)
-  telemedConsentSigned  Boolean   @default(false)
   notificationsConsent  Boolean   @default(false)
 
   therapistId    String
@@ -68,6 +67,7 @@ model Patient {
   consultations  Consultation[]
   documents      PatientDocument[]
   history        PatientHistory[]
+  consents       PatientConsent[]
 }
 
 model PatientDocument {
@@ -203,4 +203,35 @@ model ConsultationHistory {
   editedBy       User        @relation("ConsultationEdits", fields: [editedById], references: [id])
   editedAt       DateTime    @default(now())
   snapshot       Json
+}
+
+// T6.1 (issue #27): ledger append-only de consentimientos por finalidad
+// (Ley 21.719). Cada fila es un evento de otorgamiento o revocación de una
+// finalidad puntual; nunca se actualiza ni se borra una fila existente, se
+// agrega una nueva. El estado vigente de cada finalidad se deriva tomando la
+// última fila (por recordedAt) por (patientId, purpose) — ver
+// PatientsService.getCurrentConsentStatus.
+model PatientConsent {
+  id           String         @id @default(uuid())
+  patientId    String
+  patient      Patient        @relation(fields: [patientId], references: [id])
+  purpose      ConsentPurpose
+  action       ConsentAction
+  recordedById String
+  recordedBy   User           @relation("PatientConsentEvents", fields: [recordedById], references: [id])
+  recordedAt   DateTime       @default(now())
+  evidence     String
+
+  @@index([patientId, purpose])
+}
+
+enum ConsentPurpose {
+  TREATMENT
+  TELEMEDICINE
+  HEALTH_NETWORK
+}
+
+enum ConsentAction {
+  GRANT
+  REVOKE
 }

@@ -19,6 +19,25 @@ import {
 import api from "../api/client";
 import { formatRut, normalizeRut, validateRut } from "../utils/rut";
 
+// T6.1 (issue #27): consentimiento granular por finalidad (Ley 21.719).
+// Reemplaza los booleanos consentSigned/telemedConsentSigned (sin fecha ni
+// autor) por el estado vigente derivado del ledger PatientConsent, que el
+// backend calcula en findAll/findOne vía PatientsService.getConsentStatusMap.
+type ConsentPurpose = "TREATMENT" | "TELEMEDICINE" | "HEALTH_NETWORK";
+type ConsentStatus = Record<ConsentPurpose, boolean>;
+
+const CONSENT_PURPOSE_LABELS: Record<ConsentPurpose, string> = {
+  TREATMENT: "Tratamiento",
+  TELEMEDICINE: "Telemedicina",
+  HEALTH_NETWORK: "Red de salud",
+};
+
+const EMPTY_CONSENTS: ConsentStatus = {
+  TREATMENT: false,
+  TELEMEDICINE: false,
+  HEALTH_NETWORK: false,
+};
+
 interface Patient {
   id: string;
   fullName: string;
@@ -27,8 +46,7 @@ interface Patient {
   phone: string;
   email: string;
   occupation: string;
-  consentSigned: boolean;
-  telemedConsentSigned: boolean;
+  consents: ConsentStatus;
   emergencyContactName: string;
   emergencyContactPhone: string;
   treatingPsychiatrist: string;
@@ -57,8 +75,6 @@ const emptyForm = {
   emergencyContactPhone: "",
   treatingPsychiatrist: "",
   treatingDoctor: "",
-  consentSigned: false,
-  telemedConsentSigned: false,
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -73,8 +89,6 @@ const FIELD_LABELS: Record<string, string> = {
   emergencyContactPhone: "Teléfono emergencia",
   treatingPsychiatrist: "Psiquiatra tratante",
   treatingDoctor: "Médico tratante",
-  consentSigned: "Consentimiento",
-  telemedConsentSigned: "Consentimiento telemedicina",
   notificationsConsent: "Consentimiento notificaciones",
   isActive: "Activo",
 };
@@ -88,6 +102,8 @@ export default function PatientsPage() {
   const [selected, setSelected] = useState<Patient | null>(null);
   const [modalTab, setModalTab] = useState<ModalTab>("detail");
   const [form, setForm] = useState(emptyForm);
+  // T6.1: consentimientos a otorgar al crear la ficha, uno por finalidad
+  const [formConsents, setFormConsents] = useState<ConsentStatus>(EMPTY_CONSENTS);
   const [rutError, setRutError] = useState("");
   const [formError, setFormError] = useState("");
   const [documents, setDocuments] = useState<any[]>([]);
@@ -97,6 +113,10 @@ export default function PatientsPage() {
 
   // Edit form state
   const [editForm, setEditForm] = useState<Partial<Patient>>({});
+  // T6.1: estado editable de cada finalidad, inicializado desde el paciente
+  // seleccionado; se compara contra el estado original al guardar para
+  // saber qué finalidades cambiaron y emitir solo esos eventos GRANT/REVOKE.
+  const [editConsents, setEditConsents] = useState<ConsentStatus>(EMPTY_CONSENTS);
   const [editReason, setEditReason] = useState("");
   const [editError, setEditError] = useState("");
 
@@ -110,13 +130,53 @@ export default function PatientsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => api.post("/patients", data),
-    onSuccess: () => {
+    // T6.1: crear la ficha no acepta consentimientos en el mismo body (el
+    // backend eliminó consentSigned/telemedConsentSigned como columnas), así
+    // que se otorgan aparte, un POST /patients/:id/consents por finalidad
+    // marcada, después de crear el paciente.
+    mutationFn: async ({
+      data,
+      consents,
+    }: {
+      data: any;
+      consents: ConsentStatus;
+    }) => {
+      const res = await api.post("/patients", data);
+      const patientId = res.data.id;
+      const grants = (Object.keys(consents) as ConsentPurpose[]).filter(
+        (purpose) => consents[purpose],
+      );
+      // allSettled (no all): el paciente ya quedó creado en la línea de
+      // arriba, así que si un POST de consentimiento individual falla no
+      // debe hacer que el flujo entero parezca haber fallado — el usuario
+      // podría reintentar creando un paciente duplicado (rut único).
+      const results = await Promise.allSettled(
+        grants.map((purpose) =>
+          api.post(`/patients/${patientId}/consents`, {
+            purpose,
+            action: "GRANT",
+            evidence: "Otorgado durante la creación de la ficha",
+          }),
+        ),
+      );
+      const failedPurposes = grants.filter(
+        (_, i) => results[i].status === "rejected",
+      );
+      return { res, failedPurposes };
+    },
+    onSuccess: ({ failedPurposes }) => {
       queryClient.invalidateQueries({ queryKey: ["patients"] });
       setShowForm(false);
       setForm(emptyForm);
+      setFormConsents(EMPTY_CONSENTS);
       setRutError("");
-      setFormError("");
+      setFormError(
+        failedPurposes.length > 0
+          ? `Paciente creado, pero no se pudo registrar el consentimiento de: ${failedPurposes
+              .map((p: ConsentPurpose) => CONSENT_PURPOSE_LABELS[p])
+              .join(", ")}. Podés otorgarlo desde la edición de la ficha.`
+          : "",
+      );
     },
     onError: (err: any) => {
       setFormError(err.response?.data?.message ?? "Error al guardar paciente");
@@ -124,15 +184,58 @@ export default function PatientsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      api.patch(`/patients/${id}`, data),
-    onSuccess: (res) => {
+    // T6.1: además de la actualización de campos (con su `reason`
+    // obligatorio de siempre), emite un POST /patients/:id/consents por cada
+    // finalidad cuyo estado cambió respecto del paciente seleccionado,
+    // reutilizando el mismo `reason` como evidencia del consentimiento.
+    mutationFn: async ({
+      id,
+      data,
+      consentChanges,
+    }: {
+      id: string;
+      data: any;
+      consentChanges: { purpose: ConsentPurpose; action: "GRANT" | "REVOKE" }[];
+    }) => {
+      await api.patch(`/patients/${id}`, data);
+      // allSettled (no all): el PATCH de arriba ya se aplicó y quedó
+      // persistido — si un consentimiento individual falla no debe
+      // esconder que los demás campos sí se guardaron.
+      const results = await Promise.allSettled(
+        consentChanges.map(({ purpose, action }) =>
+          api.post(`/patients/${id}/consents`, {
+            purpose,
+            action,
+            evidence: data.reason,
+          }),
+        ),
+      );
+      const failed = consentChanges.filter(
+        (_, i) => results[i].status === "rejected",
+      );
+      // El PATCH devuelve la fila cruda de Patient (sin `consents`, que es
+      // un campo calculado agregado solo en findOne/findAll). Se refetchea
+      // siempre (incluso con fallos parciales) para reflejar el estado real.
+      const refreshed = await api.get(`/patients/${id}`);
+      return { res: refreshed, failed };
+    },
+    onSuccess: ({ res, failed }) => {
       queryClient.invalidateQueries({ queryKey: ["patients"] });
       setSelected(res.data);
-      setModalTab("detail");
       setEditForm({});
       setEditReason("");
-      setEditError("");
+      if (failed.length > 0) {
+        // Se queda en la pestaña de edición para que el mensaje sea visible
+        // y el usuario pueda reintentar los consentimientos que fallaron.
+        setEditError(
+          `Los datos del paciente se guardaron, pero no se pudo registrar el consentimiento de: ${failed
+            .map((c) => CONSENT_PURPOSE_LABELS[c.purpose])
+            .join(", ")}. Volvé a intentarlo.`,
+        );
+      } else {
+        setModalTab("detail");
+        setEditError("");
+      }
     },
     onError: (err: any) => {
       const msg = err.response?.data?.message;
@@ -177,7 +280,10 @@ export default function PatientsPage() {
       return;
     }
     setFormError("");
-    createMutation.mutate({ ...form, rut: normalizeRut(form.rut) });
+    createMutation.mutate({
+      data: { ...form, rut: normalizeRut(form.rut) },
+      consents: formConsents,
+    });
   };
 
   const handleDelete = (p: Patient) => {
@@ -199,9 +305,8 @@ export default function PatientsPage() {
       emergencyContactPhone: p.emergencyContactPhone,
       treatingPsychiatrist: p.treatingPsychiatrist,
       treatingDoctor: p.treatingDoctor,
-      consentSigned: p.consentSigned,
-      telemedConsentSigned: p.telemedConsentSigned,
     });
+    setEditConsents(p.consents ?? EMPTY_CONSENTS);
     setEditReason("");
     setEditError("");
     setModalTab("edit");
@@ -218,9 +323,27 @@ export default function PatientsPage() {
     }
     if (!selected) return;
     setEditError("");
+
+    // T6.1: solo se emiten eventos para las finalidades cuyo checkbox
+    // efectivamente cambió respecto del estado vigente del paciente
+    // seleccionado — togglear y destogglear sin guardar no debe crear ruido
+    // en el ledger append-only.
+    const originalConsents = selected.consents ?? EMPTY_CONSENTS;
+    const consentChanges = (
+      Object.keys(editConsents) as ConsentPurpose[]
+    )
+      .filter((purpose) => editConsents[purpose] !== originalConsents[purpose])
+      .map((purpose) => ({
+        purpose,
+        action: (editConsents[purpose] ? "GRANT" : "REVOKE") as
+          | "GRANT"
+          | "REVOKE",
+      }));
+
     updateMutation.mutate({
       id: selected.id,
       data: { ...editForm, reason: editReason },
+      consentChanges,
     });
   };
 
@@ -455,29 +578,28 @@ export default function PatientsPage() {
                 }
               />
             </div>
-            <div className="flex items-center gap-6 pt-2">
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.consentSigned}
-                  onChange={(e) =>
-                    setForm({ ...form, consentSigned: e.target.checked })
-                  }
-                  className="rounded"
-                />
-                Consentimiento
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.telemedConsentSigned}
-                  onChange={(e) =>
-                    setForm({ ...form, telemedConsentSigned: e.target.checked })
-                  }
-                  className="rounded"
-                />
-                Telemedicina
-              </label>
+            <div className="flex flex-wrap items-center gap-6 pt-2">
+              {(Object.keys(CONSENT_PURPOSE_LABELS) as ConsentPurpose[]).map(
+                (purpose) => (
+                  <label
+                    key={purpose}
+                    className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formConsents[purpose]}
+                      onChange={(e) =>
+                        setFormConsents({
+                          ...formConsents,
+                          [purpose]: e.target.checked,
+                        })
+                      }
+                      className="rounded"
+                    />
+                    {CONSENT_PURPOSE_LABELS[purpose]}
+                  </label>
+                ),
+              )}
             </div>
           </div>
           {formError && (
@@ -560,12 +682,12 @@ export default function PatientsPage() {
                   <td className="px-6 py-4">
                     <span
                       className={`text-xs px-2 py-1 rounded-full ${
-                        p.consentSigned
+                        p.consents?.TREATMENT
                           ? "bg-emerald-50 text-emerald-700"
                           : "bg-amber-50 text-amber-700"
                       }`}
                     >
-                      {p.consentSigned
+                      {p.consents?.TREATMENT
                         ? "Consentimiento ✓"
                         : "Sin consentimiento"}
                     </span>
@@ -634,12 +756,12 @@ export default function PatientsPage() {
                 </div>
                 <span
                   className={`text-xs px-2 py-1 rounded-full shrink-0 ${
-                    p.consentSigned
+                    p.consents?.TREATMENT
                       ? "bg-emerald-50 text-emerald-700"
                       : "bg-amber-50 text-amber-700"
                   }`}
                 >
-                  {p.consentSigned ? "✓" : "Pendiente"}
+                  {p.consents?.TREATMENT ? "✓" : "Pendiente"}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mb-3">
@@ -780,6 +902,33 @@ export default function PatientsPage() {
                       {selected.treatingDoctor || "—"}
                     </p>
                   </div>
+
+                  {/* T6.1 (issue #27): estado vigente de consentimiento por
+                      finalidad, cada una otorgable/revocable de forma
+                      independiente (Ley 21.719) */}
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <p className="font-medium text-slate-700 text-sm mb-3">
+                      Consentimientos
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(
+                        Object.keys(CONSENT_PURPOSE_LABELS) as ConsentPurpose[]
+                      ).map((purpose) => (
+                        <span
+                          key={purpose}
+                          className={`text-xs px-2 py-1 rounded-full ${
+                            selected.consents?.[purpose]
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          {CONSENT_PURPOSE_LABELS[purpose]}:{" "}
+                          {selected.consents?.[purpose] ? "✓" : "Pendiente"}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="mt-4 pt-4 border-t border-slate-100">
                     <p className="font-medium text-slate-700 text-sm mb-3">
                       Documentos legales
@@ -1010,37 +1159,35 @@ export default function PatientsPage() {
                         }
                       />
                     </div>
-                    <div className="flex items-center gap-6 pt-2 md:col-span-2">
-                      <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={editForm.consentSigned ?? false}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              consentSigned: e.target.checked,
-                            })
-                          }
-                          className="rounded"
-                        />
-                        Consentimiento
-                      </label>
-                      <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={editForm.telemedConsentSigned ?? false}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              telemedConsentSigned: e.target.checked,
-                            })
-                          }
-                          className="rounded"
-                        />
-                        Telemedicina
-                      </label>
+                    <div className="flex flex-wrap items-center gap-6 pt-2 md:col-span-2">
+                      {(
+                        Object.keys(CONSENT_PURPOSE_LABELS) as ConsentPurpose[]
+                      ).map((purpose) => (
+                        <label
+                          key={purpose}
+                          className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={editConsents[purpose] ?? false}
+                            onChange={(e) =>
+                              setEditConsents({
+                                ...editConsents,
+                                [purpose]: e.target.checked,
+                              })
+                            }
+                            className="rounded"
+                          />
+                          {CONSENT_PURPOSE_LABELS[purpose]}
+                        </label>
+                      ))}
                     </div>
                   </div>
+                  <p className="text-xs text-slate-400 -mt-2">
+                    Otorgar o revocar una finalidad de consentimiento aquí
+                    también queda registrado con el motivo indicado abajo
+                    como evidencia (Ley 21.719).
+                  </p>
 
                   {/* Motivo obligatorio */}
                   <div className="pt-2 border-t border-slate-100">

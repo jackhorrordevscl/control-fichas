@@ -37,6 +37,15 @@ export class ReportsService {
       throw new NotFoundException('Paciente no encontrado');
     }
 
+    // T6.1 (issue #27): consentSigned/telemedConsentSigned ya no existen como
+    // columnas; el estado vigente por finalidad se deriva del ledger
+    // append-only PatientConsent.
+    const consentStatus = await this.patientsService.getCurrentConsentStatus(
+      patientId,
+      userId,
+      userRole,
+    );
+
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers: Buffer[] = [];
@@ -90,8 +99,8 @@ export class ReportsService {
       doc.text(`Psicólogo/a tratante: ${patient.therapist?.name ?? 'No asignado'}`);
 
       doc.moveDown();
-      doc.text(`Consentimiento informado: ${patient.consentSigned ? 'Firmado' : 'Pendiente'}`);
-      doc.text(`Acuerdo telemedicina: ${patient.telemedConsentSigned ? 'Firmado' : 'Pendiente'}`);
+      doc.text(`Consentimiento informado: ${consentStatus.TREATMENT ? 'Firmado' : 'Pendiente'}`);
+      doc.text(`Acuerdo telemedicina: ${consentStatus.TELEMEDICINE ? 'Firmado' : 'Pendiente'}`);
 
       doc.moveDown(2);
 

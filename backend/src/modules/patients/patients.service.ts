@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
+import { RecordConsentDto } from './dto/record-consent.dto';
+import { ConsentPurpose } from '@prisma/client';
 
 function normalizeRut(rut: string): string {
   return rut.replace(/\./g, '').trim().toUpperCase();
@@ -9,6 +11,12 @@ function normalizeRut(rut: string): string {
 
 function isDate(val: unknown): val is Date {
   return val !== null && val !== undefined && Object.prototype.toString.call(val) === '[object Date]';
+}
+
+type ConsentStatusMap = Record<ConsentPurpose, boolean>;
+
+function emptyConsentStatus(): ConsentStatusMap {
+  return { TREATMENT: false, TELEMEDICINE: false, HEALTH_NETWORK: false };
 }
 
 @Injectable()
@@ -26,25 +34,56 @@ export class PatientsService {
     });
   }
 
-  async findAll(userId: string, userRole: string) {
-    if (userRole === 'DIRECTOR' || userRole === 'ADMIN') {
-      return this.prisma.patient.findMany({
-        where: { deletedAt: null },
-        include: { therapist: { select: { id: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
-      });
-    }
-    if (userRole === 'COORDINATOR') {
-      return this.prisma.patient.findMany({
-        where: { deletedAt: null },
-        include: { therapist: { select: { id: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
-      });
-    }
-    return this.prisma.patient.findMany({
-      where: { therapistId: userId, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
+  // T6.1 (issue #27): estado vigente de consentimiento por finalidad para un
+  // lote de pacientes en una sola consulta (evita N+1 al listar). Toma la
+  // última fila (por recordedAt) por (patientId, purpose) vía DISTINCT ON;
+  // Prisma requiere que los campos de `distinct` encabecen el `orderBy` para
+  // que el resultado sea determinístico.
+  private async getConsentStatusMap(
+    patientIds: string[],
+  ): Promise<Map<string, ConsentStatusMap>> {
+    const map = new Map<string, ConsentStatusMap>();
+    if (patientIds.length === 0) return map;
+
+    const latestEvents = await this.prisma.patientConsent.findMany({
+      where: { patientId: { in: patientIds } },
+      distinct: ['patientId', 'purpose'],
+      orderBy: [
+        { patientId: 'asc' },
+        { purpose: 'asc' },
+        { recordedAt: 'desc' },
+      ],
     });
+
+    for (const id of patientIds) map.set(id, emptyConsentStatus());
+    for (const event of latestEvents) {
+      const status = map.get(event.patientId) ?? emptyConsentStatus();
+      status[event.purpose] = event.action === 'GRANT';
+      map.set(event.patientId, status);
+    }
+    return map;
+  }
+
+  async findAll(userId: string, userRole: string) {
+    let patients;
+    if (userRole === 'DIRECTOR' || userRole === 'ADMIN' || userRole === 'COORDINATOR') {
+      patients = await this.prisma.patient.findMany({
+        where: { deletedAt: null },
+        include: { therapist: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+    } else {
+      patients = await this.prisma.patient.findMany({
+        where: { therapistId: userId, deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    const consentMap = await this.getConsentStatusMap(patients.map((p) => p.id));
+    return patients.map((p) => ({
+      ...p,
+      consents: consentMap.get(p.id) ?? emptyConsentStatus(),
+    }));
   }
 
   async findOne(id: string, userId: string, userRole: string) {
@@ -63,19 +102,24 @@ export class PatientsService {
       },
     });
     if (!patient) throw new NotFoundException('Paciente no encontrado');
-    if (userRole === 'DIRECTOR' || userRole === 'ADMIN') return patient;
-    if (userRole === 'COORDINATOR') {
-      if (patient.therapistId !== userId) {
-        throw new ForbiddenException(
-          'Como Coordinador solo puedes ver la ficha clínica de tus propios pacientes',
-        );
-      }
-      return patient;
+    if (userRole === 'COORDINATOR' && patient.therapistId !== userId) {
+      throw new ForbiddenException(
+        'Como Coordinador solo puedes ver la ficha clínica de tus propios pacientes',
+      );
     }
-    if (patient.therapistId !== userId) {
+    if (
+      userRole !== 'DIRECTOR' &&
+      userRole !== 'ADMIN' &&
+      userRole !== 'COORDINATOR' &&
+      patient.therapistId !== userId
+    ) {
       throw new ForbiddenException('Acceso denegado a este paciente');
     }
-    return patient;
+    // T6.1: las tres ramas de acceso necesitan el mismo cálculo de estado de
+    // consentimiento, así que se calcula una sola vez acá en vez de repetirlo
+    // en cada return.
+    const consents = (await this.getConsentStatusMap([id])).get(id) ?? emptyConsentStatus();
+    return { ...patient, consents };
   }
 
   async update(id: string, dto: UpdatePatientDto, userId: string, userRole?: string) {
@@ -110,8 +154,9 @@ export class PatientsService {
       return current;
     }
 
-    // Snapshot sin relaciones
-    const { therapist, consultations, documents, ...snapshot } = current as any;
+    // Snapshot sin relaciones ni campos computados (consents es agregado en
+    // findOne desde el ledger PatientConsent, no una columna real de Patient)
+    const { therapist, consultations, documents, consents, ...snapshot } = current as any;
 
    return this.prisma.$transaction(async (tx) => {
   await tx.patientHistory.create({
@@ -153,6 +198,60 @@ export class PatientsService {
       },
       orderBy: { changedAt: 'desc' },
     });
+  }
+
+  // T6.1 (issue #27): registra un evento de otorgamiento/revocación para una
+  // finalidad puntual. findOne aplica el mismo control de acceso que el
+  // resto de las mutaciones del módulo (dueño THERAPIST/COORDINATOR o
+  // DIRECTOR/ADMIN sin restricción).
+  async recordConsent(
+    id: string,
+    dto: RecordConsentDto,
+    userId: string,
+    userRole: string,
+  ) {
+    await this.findOne(id, userId, userRole);
+
+    return this.prisma.patientConsent.create({
+      data: {
+        patientId: id,
+        purpose: dto.purpose,
+        action: dto.action,
+        recordedById: userId,
+        evidence: dto.evidence,
+      },
+    });
+  }
+
+  async getConsentLedger(id: string, userId: string, userRole: string) {
+    await this.findOne(id, userId, userRole);
+
+    return this.prisma.patientConsent.findMany({
+      where: { patientId: id },
+      include: {
+        recordedBy: { select: { id: true, name: true, role: true } },
+      },
+      orderBy: { recordedAt: 'desc' },
+    });
+  }
+
+  async getCurrentConsentStatus(
+    id: string,
+    userId: string,
+    userRole: string,
+  ): Promise<ConsentStatusMap> {
+    await this.findOne(id, userId, userRole);
+
+    const status = emptyConsentStatus();
+    const latestEvents = await this.prisma.patientConsent.findMany({
+      where: { patientId: id },
+      distinct: ['purpose'],
+      orderBy: { recordedAt: 'desc' },
+    });
+    for (const event of latestEvents) {
+      status[event.purpose] = event.action === 'GRANT';
+    }
+    return status;
   }
 
 }

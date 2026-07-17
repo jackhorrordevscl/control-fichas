@@ -44,8 +44,12 @@ export default function DashboardPage() {
       route: "/consultations",
     },
     {
+      // T6.1 (issue #27): consentSigned ya no existe como columna; el
+      // backend agrega `consents` (estado vigente por finalidad, derivado
+      // del ledger PatientConsent) en la misma respuesta de GET /patients,
+      // así que este stat sigue sin necesitar llamadas extra.
       label: "Consentimientos firmados",
-      value: patients.filter((p: any) => p.consentSigned).length,
+      value: patients.filter((p: any) => p.consents?.TREATMENT).length,
       icon: FileText,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
@@ -134,7 +138,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-400">{p.rut}</p>
                 </div>
                 <div className="shrink-0">
-                  {p.consentSigned ? (
+                  {p.consents?.TREATMENT ? (
                     <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">
                       ✓
                     </span>
