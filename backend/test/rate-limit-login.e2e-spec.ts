@@ -152,9 +152,10 @@ describe('Rate limiting en POST /auth/mfa/verify (e2e)', () => {
  * getLoginTracker decide contra qué IP se cuenta el límite de intentos.
  * X-Forwarded-For es una lista que cada proxy AGREGA al final: el primer
  * valor lo pone el cliente (falsificable por cualquiera que arme el request
- * a mano) y el último es el que agregó el único proxy confiable (Railway).
- * Usar el valor equivocado (el primero) deja el rate limiting completamente
- * evadible por cualquier atacante que no pase por un navegador — por eso
+ * a mano) y el último es el que agregó el proxy confiable (con un único
+ * proxy de edge delante, ej. sin CDN). Usar el valor equivocado (el primero)
+ * deja el rate limiting completamente evadible por cualquier atacante que
+ * no pase por un navegador — por eso
  * esto se prueba directo, sin depender de que algún test e2e lo ejercite de
  * forma indirecta.
  */

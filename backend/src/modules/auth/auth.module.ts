@@ -67,12 +67,12 @@ function parsePositiveInt(
 // eso depende de cuántos proxies confiables haya delante.
 //
 // TRUSTED_PROXY_HOPS = cantidad de proxies confiables delante de la app.
-// Con Railway (o cualquier PaaS con un solo proxy de edge) es 1: el único
-// valor de la lista es directamente la IP real, así que "el último" ==
-// "el único" == el correcto.
-// Con Render detrás de Cloudflare (verificado en un deploy real, T4.2
-// follow-up) son 3: Cloudflare agrega la IP real del cliente (no confía en
-// lo que el cliente le mande, así que ese valor no se puede spoofear), y
+// Con un único proxy de edge (PaaS sin CDN delante) es 1: el único valor de
+// la lista es directamente la IP real, así que "el último" == "el único" ==
+// el correcto.
+// Con Render detrás de Cloudflare (el deploy actual, verificado en un deploy
+// real, T4.2 follow-up) son 3: Cloudflare agrega la IP real del cliente (no
+// confía en lo que el cliente le mande, así que ese valor no se puede spoofear), y
 // después el ingress + el ruteo interno de Render agregan un hop cada uno.
 // Con TRUSTED_PROXY_HOPS=3 sobre esa lista de 3 valores, el índice
 // resultante es 0 — el que agregó Cloudflare. Si algún día cambia la
