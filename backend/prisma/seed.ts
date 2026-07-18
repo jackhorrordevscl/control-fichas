@@ -6,13 +6,21 @@ import * as argon2 from 'argon2';
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await argon2.hash('Umbral2024!');
+  // T7.3 (issue #32): configurable por env para que CI (y cualquier entorno
+  // de test) pueda fijar credenciales explícitas sin depender de que el
+  // literal hardcodeado acá coincida por casualidad con lo que esperan los
+  // e2e-specs que loguean como este admin semilla (SEED_ADMIN_EMAIL/
+  // SEED_ADMIN_PASSWORD). Sin env vars seteadas, se comporta igual que
+  // antes.
+  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@umbral.cl';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'Umbral2024!';
+  const passwordHash = await argon2.hash(adminPassword);
 
   const user = await prisma.user.upsert({
-    where: { email: 'admin@umbral.cl' },
+    where: { email: adminEmail },
     update: {},
     create: {
-      email: 'admin@umbral.cl',
+      email: adminEmail,
       passwordHash,
       name: 'Administrador Umbral',
       role: 'ADMIN',
