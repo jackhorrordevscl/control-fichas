@@ -5,6 +5,10 @@ import { App } from 'supertest/types';
 import * as speakeasy from 'speakeasy';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  SEED_ADMIN_EMAIL_DEFAULT,
+  SEED_ADMIN_PASSWORD_DEFAULT,
+} from '../prisma/seed-admin.defaults';
 
 /**
  * T6.1 (issue #27): consentimiento granular por finalidad (Ley 21.719).
@@ -19,8 +23,9 @@ describe('Patient consent ledger (e2e)', () => {
   let prisma: PrismaService;
 
   const runId = Date.now();
-  const ADMIN_EMAIL = 'admin@umbral.cl';
-  const ADMIN_PASSWORD = 'Umbral2024!';
+  const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? SEED_ADMIN_EMAIL_DEFAULT;
+  const ADMIN_PASSWORD =
+    process.env.SEED_ADMIN_PASSWORD ?? SEED_ADMIN_PASSWORD_DEFAULT;
   const TEST_PASSWORD = 'TestPass123!';
 
   let adminToken: string;
@@ -144,6 +149,15 @@ describe('Patient consent ledger (e2e)', () => {
           data: { deletedAt: new Date() },
         });
       }
+
+      // El beforeAll enrola MFA en el admin seedeado; ningún test posterior
+      // lo deshace. Mismo patrón que auth-mfa-enforcement/rbac-ownership: sin
+      // este reset, el admin queda con un mfaSecret de test inservible para
+      // cualquiera que loguee después.
+      await prisma.user.updateMany({
+        where: { email: ADMIN_EMAIL },
+        data: { mfaEnabled: false, mfaSecret: null },
+      });
     } finally {
       await app.close();
     }

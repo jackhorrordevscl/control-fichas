@@ -128,6 +128,20 @@ describe('MFA enforcement para roles administrativos (e2e)', () => {
           data: { deletedAt: new Date() },
         });
       }
+
+      // El último test de la suite deja al admin con mfaEnabled=true (y un
+      // mfaSecret generado por speakeasy, inservible fuera del test). Sin
+      // este reset, esa suite deja el admin seedeado inutilizable para
+      // cualquiera que loguee después con una app autenticadora real —
+      // tanto en un dev local haciendo login manual como en otra suite que
+      // asuma MFA deshabilitado por defecto (rbac-ownership.e2e-spec.ts, por
+      // ejemplo, ya lo resetea por su cuenta antes de usarlo, así que este
+      // reset no le hace falta a ella — es para dejar la base consistente
+      // después de correr esta suite).
+      await prisma.user.updateMany({
+        where: { email: ADMIN_EMAIL },
+        data: { mfaEnabled: false, mfaSecret: null },
+      });
     } finally {
       await app.close();
     }
@@ -255,8 +269,10 @@ describe('MFA enforcement para roles administrativos (e2e)', () => {
         .set('Authorization', `Bearer ${freshSetupToken}`)
         .expect(401);
 
-      // Se deja al admin enrolado de nuevo para no afectar otras suites
-      // que reutilizan este usuario seedeado.
+      // Se deja al admin enrolado de nuevo para ejercitar setupToken/Bearer
+      // en el estado que el test anterior dejaba (mfaEnabled=true): el
+      // afterAll de la suite es quien se encarga de la limpieza final para
+      // quien use este usuario seedeado después.
       const beginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/mfa/setup/begin')
         .send({ setupToken: freshSetupToken })
