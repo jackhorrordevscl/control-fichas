@@ -320,6 +320,7 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass file:"$HOME/.umbral_backup_passphrase"
 | `MFA_APP_NAME` | Nombre que aparece en la app autenticadora | `Umbral SpA` |
 | `FRONTEND_URL` | URL del frontend (para CORS) | `http://localhost:5173` |
 | `RUN_MIGRATIONS` | Si es `true`, corre `prisma migrate deploy` al arrancar (ver `main.ts`) | `false` |
+| `TRUSTED_PROXY_HOPS` | Cantidad de proxies confiables delante de la app, para identificar la IP real del cliente en el rate-limit de login (ver comentario en `auth.module.ts`) | `1` (Railway/un solo proxy). Con Render detrás de Cloudflare: `3` |
 
 > ⚠️ Si el comando de arranque del hosting ya corre `prisma migrate deploy` antes de iniciar el server (recomendado), **no** setees `RUN_MIGRATIONS=true` también — no rompe nada (la migración es idempotente), pero la corre dos veces innecesariamente.
 

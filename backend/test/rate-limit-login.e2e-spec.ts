@@ -191,4 +191,34 @@ describe('getLoginTracker (unit)', () => {
       }),
     ).toBe('203.0.113.7');
   });
+
+  // Render detrás de Cloudflare (verificado contra un deploy real): 3
+  // proxies confiables agregan un hop cada uno. El primer valor de la lista
+  // es el que agregó Cloudflare (la IP real del cliente, no falsificable) —
+  // "el último" (comportamiento de un solo proxy confiable) ya no sirve acá.
+  it('con trustedProxyHops=3 (Render+Cloudflare) usa el primer valor, no el último', () => {
+    expect(
+      getLoginTracker(
+        {
+          headers: {
+            'x-forwarded-for': '198.51.100.7, 172.68.174.254, 10.27.164.133',
+          },
+          ip: '127.0.0.1',
+        },
+        3,
+      ),
+    ).toBe('198.51.100.7');
+  });
+
+  it('con trustedProxyHops mayor a la cantidad de valores, cae al primero en vez de romper', () => {
+    expect(
+      getLoginTracker(
+        {
+          headers: { 'x-forwarded-for': '198.51.100.7' },
+          ip: '127.0.0.1',
+        },
+        3,
+      ),
+    ).toBe('198.51.100.7');
+  });
 });

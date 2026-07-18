@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -48,27 +48,53 @@ function parsePositiveInt(
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-// La app corre en Railway, detrás de su proxy de edge. Sin esto, ThrottlerGuard
-// usaría su tracker por defecto (req.ip), que sin `trust proxy` configurado en
-// Express resuelve a la IP del proxy para TODAS las conexiones — colapsando el
-// límite de login en un único bucket global compartido por todos los usuarios,
-// donde cualquiera podría agotarlo y bloquear el login de todo el mundo con
-// 429. En vez de tocar la config global de Express en main.ts (que afectaría
-// a cualquier otro consumidor de req.ip en la app, ej. AuditLog.ipAddress),
-// esto queda acotado al throttler de login.
+// Sin esto, ThrottlerGuard usaría su tracker por defecto (req.ip), que sin
+// `trust proxy` configurado en Express resuelve a la IP del proxy para TODAS
+// las conexiones — colapsando el límite de login en un único bucket global
+// compartido por todos los usuarios, donde cualquiera podría agotarlo y
+// bloquear el login de todo el mundo con 429. En vez de tocar la config
+// global de Express en main.ts (que afectaría a cualquier otro consumidor
+// de req.ip en la app, ej. AuditLog.ipAddress), esto queda acotado al
+// throttler de login.
 //
 // X-Forwarded-For es una lista que cada proxy AGREGA al final, no reemplaza:
 // el primer valor lo pone el cliente (así que es trivialmente falsificable
-// por cualquiera que arme el request a mano) y el último valor es el que
-// agregó el proxy que efectivamente conectó con este proceso. Con exactamente
-// un proxy confiable delante (Railway), el último valor de la lista es el
-// único que no se puede spoofear desde el cliente, así que se usa ese —
-// nunca el primero — y se cae a req.ip si el header no está presente (ej.
-// tests locales sin proxy).
-export function getLoginTracker(req: {
-  headers: Record<string, string | string[] | undefined>;
-  ip: string;
-}): string {
+// por cualquiera que arme el request a mano), y cada proxy confiable que
+// sigue agrega la IP de quien se conectó DIRECTO a él. El valor que
+// necesitamos es el que agregó el proxy MÁS EXTERNO de nuestra infra
+// confiable (el primero que ve la conexión real del cliente y no confía en
+// lo que el cliente le mande) — no necesariamente "el último" de la lista,
+// eso depende de cuántos proxies confiables haya delante.
+//
+// TRUSTED_PROXY_HOPS = cantidad de proxies confiables delante de la app.
+// Con Railway (o cualquier PaaS con un solo proxy de edge) es 1: el único
+// valor de la lista es directamente la IP real, así que "el último" ==
+// "el único" == el correcto.
+// Con Render detrás de Cloudflare (verificado en un deploy real, T4.2
+// follow-up) son 3: Cloudflare agrega la IP real del cliente (no confía en
+// lo que el cliente le mande, así que ese valor no se puede spoofear), y
+// después el ingress + el ruteo interno de Render agregan un hop cada uno.
+// Con TRUSTED_PROXY_HOPS=3 sobre esa lista de 3 valores, el índice
+// resultante es 0 — el que agregó Cloudflare. Si algún día cambia la
+// cantidad de saltos internos de Render, se ajusta la env var sin tocar
+// código.
+//
+// Si la lista tiene menos valores de los esperados (headers.length < hops
+// esperados) se usa el primer valor como fallback en vez de un índice
+// negativo — más seguro que reventar. OJO: esto asume que la cantidad real
+// de proxies confiables delante nunca es MENOR a TRUSTED_PROXY_HOPS — si el
+// origin de Render fuera alcanzable directo (bypaseando Cloudflare), un
+// atacante podría mandar una lista más corta con contenido propio y
+// controlar qué valor cae en el índice esperado. Este código no puede
+// blindar contra eso por sí solo; requiere que la infra (Render/Cloudflare)
+// efectivamente bloquee el acceso directo al origin.
+export function getLoginTracker(
+  req: {
+    headers: Record<string, string | string[] | undefined>;
+    ip: string;
+  },
+  trustedProxyHops = 1,
+): string {
   const forwardedFor = req.headers['x-forwarded-for'];
   const raw = Array.isArray(forwardedFor)
     ? forwardedFor.join(',')
@@ -79,7 +105,8 @@ export function getLoginTracker(req: {
       .map((hop) => hop.trim())
       .filter((hop) => hop.length > 0);
     if (hops.length > 0) {
-      return hops[hops.length - 1];
+      const index = hops.length - trustedProxyHops;
+      return hops[index >= 0 ? index : 0];
     }
   }
   return req.ip;
@@ -108,12 +135,18 @@ export function buildAuthThrottlerOptions(
     60000,
   );
 
+  const trustedProxyHops = parsePositiveInt(
+    config.get<string>('TRUSTED_PROXY_HOPS'),
+    1,
+  );
+
   return {
     throttlers: [
       { name: 'login', limit: loginLimit, ttl: loginTtl },
       { name: 'mfa-verify', limit: mfaVerifyLimit, ttl: mfaVerifyTtl },
     ],
-    getTracker: getLoginTracker,
+    getTracker: (req: Record<string, any>) =>
+      getLoginTracker(req as Parameters<typeof getLoginTracker>[0], trustedProxyHops),
   };
 }
 
