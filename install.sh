@@ -61,6 +61,9 @@ if [ ! -f .env ]; then
   echo "📝 Creando archivo .env del backend..."
   cat > .env <<EOL
 DATABASE_URL="postgresql://umbral_user:umbral_password_2024@localhost:5432/umbral_db"
+# En producción con un pooler delante (ej. Supabase/PgBouncer), DIRECT_URL
+# debe ser la conexión directa, no la pooled — la necesita prisma migrate.
+DIRECT_URL="postgresql://umbral_user:umbral_password_2024@localhost:5432/umbral_db"
 JWT_SECRET="umbral-jwt-secret-cambiar-en-produccion-2024"
 JWT_EXPIRES_IN="8h"
 MFA_APP_NAME="Umbral SpA"
