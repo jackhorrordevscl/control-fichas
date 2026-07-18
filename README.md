@@ -76,6 +76,10 @@ Contenido del `.env`:
 
 ```env
 DATABASE_URL="postgresql://umbral_user:tu_password_seguro@localhost:5432/umbral_db"
+# En local (sin pooler) es la misma conexión que DATABASE_URL. En producción
+# con un pooler delante (ej. Supabase/PgBouncer), DIRECT_URL debe ser la
+# conexión directa, no la pooled — Prisma Migrate la necesita para funcionar.
+DIRECT_URL="postgresql://umbral_user:tu_password_seguro@localhost:5432/umbral_db"
 JWT_SECRET="cambia-este-secreto-en-produccion"
 JWT_EXPIRES_IN="8h"
 MFA_APP_NAME="Umbral SpA"
@@ -309,11 +313,15 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass file:"$HOME/.umbral_backup_passphrase"
 
 | Variable | Descripción | Ejemplo |
 |---|---|---|
-| `DATABASE_URL` | URL de conexión PostgreSQL | `postgresql://user:pass@localhost:5432/db` |
+| `DATABASE_URL` | URL de conexión PostgreSQL (pooled en producción) | `postgresql://user:pass@localhost:5432/db` |
+| `DIRECT_URL` | Conexión directa (sin pooler) para `prisma migrate` | Igual a `DATABASE_URL` en local |
 | `JWT_SECRET` | Clave secreta para firmar tokens | Cadena aleatoria larga |
 | `JWT_EXPIRES_IN` | Tiempo de expiración del token | `8h` |
 | `MFA_APP_NAME` | Nombre que aparece en la app autenticadora | `Umbral SpA` |
 | `FRONTEND_URL` | URL del frontend (para CORS) | `http://localhost:5173` |
+| `RUN_MIGRATIONS` | Si es `true`, corre `prisma migrate deploy` al arrancar (ver `main.ts`) | `false` |
+
+> ⚠️ Si el comando de arranque del hosting ya corre `prisma migrate deploy` antes de iniciar el server (recomendado), **no** setees `RUN_MIGRATIONS=true` también — no rompe nada (la migración es idempotente), pero la corre dos veces innecesariamente.
 
 ---
 

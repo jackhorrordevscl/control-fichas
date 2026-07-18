@@ -28,6 +28,10 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://umbral_ci:umbral_ci@localhost:5432/umbral_ci
+      # El service container de Postgres no tiene pooler (a diferencia de
+      # Supabase en producción), así que DIRECT_URL apunta a la misma
+      # conexión que DATABASE_URL — ver el comentario en schema.prisma.
+      DIRECT_URL: postgresql://umbral_ci:umbral_ci@localhost:5432/umbral_ci
       JWT_SECRET: ci-only-jwt-secret-never-used-outside-github-actions
       JWT_EXPIRES_IN: 8h
       MFA_APP_NAME: Umbral SpA (CI)
