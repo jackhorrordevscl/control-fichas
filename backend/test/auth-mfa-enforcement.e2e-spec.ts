@@ -7,6 +7,10 @@ import { App } from 'supertest/types';
 import * as speakeasy from 'speakeasy';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  SEED_ADMIN_EMAIL_DEFAULT,
+  SEED_ADMIN_PASSWORD_DEFAULT,
+} from '../prisma/seed-admin.defaults';
 
 /**
  * T4.1 (issue #19): un usuario ADMIN/DIRECTOR sin MFA habilitado no puede
@@ -20,29 +24,22 @@ import { PrismaService } from '../src/prisma/prisma.service';
  * para que la suite sea repetible sobre la misma base, y se limpian en
  * afterAll.
  *
- * ADMIN_EMAIL/ADMIN_PASSWORD se leen de env (SEED_ADMIN_EMAIL /
- * SEED_ADMIN_PASSWORD, ver backend/.env) en vez de hardcodearse acá: son
- * las credenciales del ADMIN seedeado por prisma/seed.ts, y un literal en
- * el código dispara falsos positivos de secret scanning (GitGuardian) en
- * cada PR que toque este archivo.
+ * ADMIN_EMAIL/ADMIN_PASSWORD son las credenciales del ADMIN seedeado por
+ * prisma/seed.ts. Se leen de env (SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD, que
+ * CI fija explícitamente) y caen al MISMO default que usa el seed cuando no
+ * están seteadas — así la suite corre en local sin configuración previa y
+ * nunca queda desalineada con lo que seedea la base. El literal vive en
+ * prisma/seed-admin.defaults.ts (no acá) para no disparar el secret scanning
+ * (GitGuardian) en cada PR que toque este spec.
  */
-function requiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(
-      `Falta ${name} en el entorno de test (ver backend/.env) — requerido para autenticar al ADMIN seedeado.`,
-    );
-  }
-  return value;
-}
-
 describe('MFA enforcement para roles administrativos (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
 
   const runId = Date.now();
-  const ADMIN_EMAIL = requiredEnv('SEED_ADMIN_EMAIL');
-  const ADMIN_PASSWORD = requiredEnv('SEED_ADMIN_PASSWORD');
+  const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? SEED_ADMIN_EMAIL_DEFAULT;
+  const ADMIN_PASSWORD =
+    process.env.SEED_ADMIN_PASSWORD ?? SEED_ADMIN_PASSWORD_DEFAULT;
   const TEST_PASSWORD = 'TestPass123!';
 
   let adminSetupToken: string;
