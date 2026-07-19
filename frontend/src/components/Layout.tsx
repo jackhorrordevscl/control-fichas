@@ -16,14 +16,20 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const navLinks = [
+  // T6.4 (issue #51): ADMIN no tiene acceso a fichas clínicas ni consultas
+  // (GET /patients y lo que delega en él responden 403 para ese rol). Sin
+  // este filtro, el link seguiría visible y llevaría a una pantalla rota.
+  const allNavLinks = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/patients', icon: Users, label: 'Pacientes' },
-    { to: '/consultations', icon: ClipboardList, label: 'Consultas' },
+    { to: '/patients', icon: Users, label: 'Pacientes', hideForAdmin: true },
+    { to: '/consultations', icon: ClipboardList, label: 'Consultas', hideForAdmin: true },
     { to: '/archivos', icon: FolderOpen, label: 'Repositorio' },
     { to: '/settings', icon: ShieldCheck, label: 'Seguridad' },
     { to: '/users', icon: UserCog, label: 'Usuarios' },
   ];
+  const navLinks = allNavLinks.filter(
+    (link) => !(link.hideForAdmin && user?.role === 'ADMIN'),
+  );
 
   return (
     <div className="flex h-screen bg-cream-100">

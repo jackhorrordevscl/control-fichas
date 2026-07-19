@@ -150,7 +150,7 @@ describe('AuthService', () => {
       expect(result).toEqual({ requiresMfa: true, userId: 'user-1' });
     });
 
-    it('devuelve requiresMfaSetup si el rol es administrativo (ADMIN/DIRECTOR) sin MFA', async () => {
+    it('devuelve requiresMfaSetup si el rol es administrativo (ADMIN/SUPERVISOR) sin MFA', async () => {
       prisma.user.findUnique.mockResolvedValue(
         buildUser({ role: Role.ADMIN, mfaEnabled: false }),
       );

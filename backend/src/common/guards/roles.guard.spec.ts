@@ -33,7 +33,7 @@ describe('RolesGuard', () => {
 
   it('permite el acceso cuando el rol del usuario está en la lista requerida', () => {
     const reflector = {
-      getAllAndOverride: jest.fn().mockReturnValue(['ADMIN', 'DIRECTOR']),
+      getAllAndOverride: jest.fn().mockReturnValue(['ADMIN', 'SUPERVISOR']),
     } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
 
@@ -44,7 +44,7 @@ describe('RolesGuard', () => {
 
   it('deniega el acceso cuando el rol del usuario NO está en la lista requerida', () => {
     const reflector = {
-      getAllAndOverride: jest.fn().mockReturnValue(['ADMIN', 'DIRECTOR']),
+      getAllAndOverride: jest.fn().mockReturnValue(['ADMIN', 'SUPERVISOR']),
     } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
 

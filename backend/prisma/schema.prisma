@@ -45,7 +45,7 @@ model User {
 }
 
 enum Role {
-  DIRECTOR
+  SUPERVISOR
   COORDINATOR
   THERAPIST
   ADMIN

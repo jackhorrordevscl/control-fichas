@@ -13,7 +13,7 @@ import {
 } from '../prisma/seed-admin.defaults';
 
 /**
- * T4.1 (issue #19): un usuario ADMIN/DIRECTOR sin MFA habilitado no puede
+ * T4.1 (issue #19): un usuario ADMIN/SUPERVISOR sin MFA habilitado no puede
  * quedarse con una sesión activa sin MFA. login() ya no le entrega un
  * accessToken directo: entrega un setupToken de corta duración (purpose
  * 'mfa-setup') que solo sirve para /auth/mfa/setup/begin y
@@ -147,7 +147,7 @@ describe('MFA enforcement para roles administrativos (e2e)', () => {
     }
   });
 
-  describe('login de ADMIN/DIRECTOR sin MFA', () => {
+  describe('login de ADMIN/SUPERVISOR sin MFA', () => {
     it('responde requiresMfaSetup con setupToken y NO devuelve accessToken', async () => {
       // Se resetea de nuevo: el beforeAll ya dejó al admin con mfaEnabled=true
       // al completar el bootstrap.

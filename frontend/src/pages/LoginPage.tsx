@@ -199,7 +199,7 @@ export default function LoginPage() {
         <div className="bg-cream-50 rounded-2xl p-8 w-full max-w-md">
           <h2 className="font-display text-3xl text-slate-900 mb-2">Activación de MFA requerida</h2>
           <p className="text-slate-500 text-sm mb-6">
-            Como ADMIN/DIRECTOR, necesitás activar MFA para continuar. Escaneá este código con tu
+            Como ADMIN/SUPERVISOR, necesitás activar MFA para continuar. Escaneá este código con tu
             app autenticadora.
           </p>
           {setupQrCode && (

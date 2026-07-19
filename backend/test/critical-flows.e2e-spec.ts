@@ -57,7 +57,7 @@ describe('Critical flows (e2e)', () => {
 
     prisma = app.get(PrismaService);
 
-    // T4.1 (issue #19): ADMIN/DIRECTOR quedan forzados a enrolar MFA en su
+    // T4.1 (issue #19): ADMIN/SUPERVISOR quedan forzados a enrolar MFA en su
     // primer login sin MFA. Se resetea el estado MFA del ADMIN seedeado
     // antes de loguear, igual que en el resto de los e2e-specs.
     await prisma.user.updateMany({

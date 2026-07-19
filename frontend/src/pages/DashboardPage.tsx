@@ -7,10 +7,15 @@ import api from "../api/client";
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  // T6.4 (issue #51): ADMIN ya no tiene acceso a fichas clínicas -- GET
+  // /patients le responde 403. Sin este `enabled`, el dashboard le rompería
+  // apenas loguea (es la primera pantalla, no un caso límite).
+  const hasPatientAccess = user?.role !== "ADMIN";
 
   const { data: patients = [] } = useQuery({
     queryKey: ["patients"],
     queryFn: () => api.get("/patients").then((r) => r.data),
+    enabled: hasPatientAccess,
   });
 
   const { data: consultations = [] } = useQuery({
@@ -24,6 +29,7 @@ export default function DashboardPage() {
         );
         return all.flat();
       }),
+    enabled: hasPatientAccess,
   });
 
   const stats = [
@@ -85,74 +91,92 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5 mb-6 md:mb-8">
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            onClick={() => navigate(stat.route)}
-            className="card flex items-center gap-3 p-4 md:p-6 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all"
-          >
-            <div className={`${stat.bg} p-2 md:p-3 rounded-lg shrink-0`}>
-              <stat.icon size={18} className={stat.color} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xl md:text-2xl font-display text-slate-900">
-                {stat.value}
-              </p>
-              <p className="text-xs text-slate-500 truncate">{stat.label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Pacientes recientes */}
-      <div className="card p-4 md:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-display text-lg md:text-xl text-slate-900">
-            Pacientes recientes
-          </h3>
-          <button
-            onClick={() => navigate("/patients")}
-            className="text-xs text-sage-600 hover:underline"
-          >
-            Ver todos →
-          </button>
-        </div>
-        {patients.length === 0 ? (
-          <p className="text-slate-400 text-sm text-center py-8">
-            No hay pacientes registrados aún.
+      {!hasPatientAccess ? (
+        <div className="card p-6 md:p-8 text-center">
+          <p className="text-slate-500 text-sm">
+            El rol Administrador no tiene acceso a datos clínicos de pacientes.
+            Gestioná cuentas de usuario desde el módulo{" "}
+            <button
+              onClick={() => navigate("/users")}
+              className="text-sage-600 hover:underline font-medium"
+            >
+              Usuarios
+            </button>
+            .
           </p>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {patients.slice(0, 5).map((p: any) => (
+        </div>
+      ) : (
+        <>
+          {/* Stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5 mb-6 md:mb-8">
+            {stats.map((stat) => (
               <div
-                key={p.id}
-                onClick={() => navigate("/patients")}
-                className="py-3 flex items-center justify-between gap-2 cursor-pointer hover:bg-cream-50 rounded-lg px-2 -mx-2 transition-colors"
+                key={stat.label}
+                onClick={() => navigate(stat.route)}
+                className="card flex items-center gap-3 p-4 md:p-6 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all"
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-800 truncate">
-                    {p.fullName}
-                  </p>
-                  <p className="text-xs text-slate-400">{p.rut}</p>
+                <div className={`${stat.bg} p-2 md:p-3 rounded-lg shrink-0`}>
+                  <stat.icon size={18} className={stat.color} />
                 </div>
-                <div className="shrink-0">
-                  {p.consents?.TREATMENT ? (
-                    <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">
-                      ✓
-                    </span>
-                  ) : (
-                    <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-full">
-                      Pendiente
-                    </span>
-                  )}
+                <div className="min-w-0">
+                  <p className="text-xl md:text-2xl font-display text-slate-900">
+                    {stat.value}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">{stat.label}</p>
                 </div>
               </div>
             ))}
           </div>
-        )}
-      </div>
+
+          {/* Pacientes recientes */}
+          <div className="card p-4 md:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg md:text-xl text-slate-900">
+                Pacientes recientes
+              </h3>
+              <button
+                onClick={() => navigate("/patients")}
+                className="text-xs text-sage-600 hover:underline"
+              >
+                Ver todos →
+              </button>
+            </div>
+            {patients.length === 0 ? (
+              <p className="text-slate-400 text-sm text-center py-8">
+                No hay pacientes registrados aún.
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {patients.slice(0, 5).map((p: any) => (
+                  <div
+                    key={p.id}
+                    onClick={() => navigate("/patients")}
+                    className="py-3 flex items-center justify-between gap-2 cursor-pointer hover:bg-cream-50 rounded-lg px-2 -mx-2 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">
+                        {p.fullName}
+                      </p>
+                      <p className="text-xs text-slate-400">{p.rut}</p>
+                    </div>
+                    <div className="shrink-0">
+                      {p.consents?.TREATMENT ? (
+                        <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">
+                          ✓
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-full">
+                          Pendiente
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

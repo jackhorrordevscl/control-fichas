@@ -16,7 +16,8 @@ import {
  * pueda otorgar/revocar de forma independiente, que cada evento quede
  * registrado en el ledger append-only PatientConsent con actor y fecha, y
  * que el control de acceso sea el mismo que el resto de las mutaciones del
- * módulo (findOne: dueño THERAPIST o DIRECTOR/ADMIN sin restricción).
+ * módulo (findOne: dueño, o SUPERVISOR si HEALTH_NETWORK ya está otorgado --
+ * T6.4, issue #51. ADMIN ya no tiene acceso, ni siquiera para registrar).
  */
 describe('Patient consent ledger (e2e)', () => {
   let app: INestApplication<App>;
@@ -54,7 +55,7 @@ describe('Patient consent ledger (e2e)', () => {
 
     prisma = app.get(PrismaService);
 
-    // T4.1 (issue #19): ADMIN/DIRECTOR quedan forzados a enrolar MFA en su
+    // T4.1 (issue #19): ADMIN/SUPERVISOR quedan forzados a enrolar MFA en su
     // primer login sin MFA. Se resetea el estado MFA del ADMIN seedeado
     // antes de loguear, igual que en rbac-ownership.e2e-spec.ts.
     await prisma.user.updateMany({
@@ -233,16 +234,28 @@ describe('Patient consent ledger (e2e)', () => {
         .expect(403);
     });
 
-    it('ADMIN puede registrar consentimiento sin restricción (2xx)', () => {
+    it('el terapeuta dueño otorga HEALTH_NETWORK (2xx)', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/patients/${patientId}/consents`)
+        .set('Authorization', `Bearer ${therapistAToken}`)
+        .send({
+          purpose: 'HEALTH_NETWORK',
+          action: 'GRANT',
+          evidence: 'Paciente autoriza compartir con la red de salud',
+        })
+        .expect(201);
+    });
+
+    it('ADMIN recibe 403 al intentar registrar consentimiento (T6.4, issue #51)', () => {
       return request(app.getHttpServer())
         .post(`/api/v1/patients/${patientId}/consents`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
           purpose: 'HEALTH_NETWORK',
           action: 'GRANT',
-          evidence: 'Registrado por ADMIN en revisión de cumplimiento',
+          evidence: 'ADMIN ya no tiene acceso a datos clínicos de pacientes',
         })
-        .expect(201);
+        .expect(403);
     });
 
     it('rechaza evidence menor a 10 caracteres (400)', () => {
@@ -262,7 +275,7 @@ describe('Patient consent ledger (e2e)', () => {
     it('refleja estado independiente por finalidad tras una mezcla de grants/revokes', async () => {
       // Estado esperado según los eventos previos:
       // TREATMENT: GRANT luego REVOKE -> false
-      // HEALTH_NETWORK: GRANT (por ADMIN) -> true
+      // HEALTH_NETWORK: GRANT (por el terapeuta dueño) -> true
       // TELEMEDICINE: sin eventos exitosos -> false
       const res = await request(app.getHttpServer())
         .get(`/api/v1/patients/${patientId}/consents/status`)
