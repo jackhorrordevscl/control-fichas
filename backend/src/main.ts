@@ -31,8 +31,10 @@ async function bootstrap() {
   const port = process.env.PORT || 3001;
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Servidor corriendo en puerto: ${port}`);
-  // Temporal: ejecutar migraciones DESPUÉS de que el servidor esté live
-  console.log('🔍 RUN_MIGRATIONS env var:', process.env.RUN_MIGRATIONS);
+  // Las migraciones corren DESPUÉS de que el servidor esté live: RUN_MIGRATIONS
+  // es el mecanismo permanente para entornos cuyo Start Command no las corre
+  // por su cuenta (ver comentario más abajo sobre por qué esto puede
+  // duplicarse con el Start Command de Render, y por qué eso es seguro).
   if (process.env.RUN_MIGRATIONS === 'true') {
     const { exec } = require('child_process');
     const path = require('path');
