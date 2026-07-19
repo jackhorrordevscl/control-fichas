@@ -320,8 +320,13 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass file:"$HOME/.umbral_backup_passphrase"
 | `MFA_APP_NAME` | Nombre que aparece en la app autenticadora | `Umbral SpA` |
 | `FRONTEND_URL` | URL del frontend (para CORS) | `http://localhost:5173` |
 | `RUN_MIGRATIONS` | Si es `true`, corre `prisma migrate deploy` al arrancar (ver `main.ts`) | `false` |
+| `TRUSTED_PROXY_HOPS` | Cantidad de proxies confiables delante de la app, para identificar la IP real del cliente en el rate-limit de login (ver comentario en `auth.module.ts`) | `1` (un único proxy de edge, sin CDN delante). Con Render detrás de Cloudflare (deploy actual): `3` |
+| `SEED_ADMIN_EMAIL` | Email del admin creado por `prisma db seed` (`npm run seed`) | `admin@umbral.cl` (default, ver `prisma/seed-admin.defaults.ts`) |
+| `SEED_ADMIN_PASSWORD` | Contraseña inicial del admin creado por el seed | Ver advertencia abajo — **nunca dejar el default en un entorno alcanzable** |
 
 > ⚠️ Si el comando de arranque del hosting ya corre `prisma migrate deploy` antes de iniciar el server (recomendado), **no** setees `RUN_MIGRATIONS=true` también — no rompe nada (la migración es idempotente), pero la corre dos veces innecesariamente.
+
+> 🔒 **`SEED_ADMIN_PASSWORD` es pública si no la overrideás.** El default (`prisma/seed-admin.defaults.ts`) está commiteado en un repo público — cualquiera lo puede leer. La cuenta admin fuerza cambio de contraseña en su primer login (`mustChangePassword`), pero eso solo protege si el operador cambia la clave *antes* de que alguien más la use con la contraseña conocida: quien loguee primero con el default se queda con el `passwordChangeToken` y puede tomar la cuenta. En local/CI el default está bien (nadie más tiene acceso a esa base). En **cualquier entorno alcanzable desde afuera** (staging, producción), seteá `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` a valores propios antes de correr el seed por primera vez.
 
 ---
 

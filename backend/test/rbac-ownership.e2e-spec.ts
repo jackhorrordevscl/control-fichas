@@ -6,6 +6,10 @@ import * as fs from 'fs';
 import * as speakeasy from 'speakeasy';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  SEED_ADMIN_EMAIL_DEFAULT,
+  SEED_ADMIN_PASSWORD_DEFAULT,
+} from '../prisma/seed-admin.defaults';
 
 /**
  * T1.5 (issue #10): verifica que los endpoints sensibles (consultas, reportes,
@@ -25,8 +29,13 @@ describe('RBAC ownership guard (e2e)', () => {
   let prisma: PrismaService;
 
   const runId = Date.now();
-  const ADMIN_EMAIL = 'admin@umbral.cl';
-  const ADMIN_PASSWORD = 'Umbral2024!';
+  // ADMIN_EMAIL/ADMIN_PASSWORD: mismo default compartido con seed.ts y las
+  // demás suites de auth (ver prisma/seed-admin.defaults.ts) — evita un
+  // literal hardcodeado acá, que dispararía falsos positivos de secret
+  // scanning (GitGuardian) en cada PR que toque este spec.
+  const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? SEED_ADMIN_EMAIL_DEFAULT;
+  const ADMIN_PASSWORD =
+    process.env.SEED_ADMIN_PASSWORD ?? SEED_ADMIN_PASSWORD_DEFAULT;
   const TEST_PASSWORD = 'TestPass123!';
 
   let adminToken: string;
@@ -206,6 +215,17 @@ describe('RBAC ownership guard (e2e)', () => {
           data: { deletedAt: new Date() },
         });
       }
+
+      // El beforeAll de esta suite enrola MFA en el admin seedeado (línea
+      // ~60) y ningún test posterior lo deshace. Sin este reset, el admin
+      // queda con mfaEnabled=true y un mfaSecret generado por speakeasy que
+      // no sirve fuera del test — inutilizable para cualquiera que loguee
+      // después (otra suite, o un dev haciendo login manual) sin ese
+      // secreto. Mismo patrón que auth-mfa-enforcement.e2e-spec.ts.
+      await prisma.user.updateMany({
+        where: { email: ADMIN_EMAIL },
+        data: { mfaEnabled: false, mfaSecret: null },
+      });
     } finally {
       await app.close();
     }

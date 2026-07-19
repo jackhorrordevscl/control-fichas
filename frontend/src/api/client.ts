@@ -16,11 +16,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Si el token expiró, redirige al login
+// Si el token de sesión expiró (401 en una llamada normal), redirige al login.
+// Excepción: los 401 del propio flujo de auth (login, mfa/verify, cambio de
+// contraseña, etc.) son errores esperados que cada pantalla maneja con su
+// propio mensaje. Redirigir en esos casos recargaría la página, borraría el
+// error de la UI (y del Network tab) y dejaría al usuario sin saber qué pasó.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const requestUrl = error.config?.url ?? '';
+    const isAuthRequest = requestUrl.includes('/auth/');
+    if (error.response?.status === 401 && !isAuthRequest) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

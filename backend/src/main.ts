@@ -44,8 +44,9 @@ async function bootstrap() {
       : path.join(__dirname, '..');
 
     // `prisma` (el CLI, no solo @prisma/client) debe permanecer en
-    // "dependencies" de package.json, no en devDependencies: railway.json
-    // también invoca `npx prisma migrate deploy` como startCommand, y este
+    // "dependencies" de package.json, no en devDependencies: el Start Command
+    // configurado en el dashboard de Render (npm run prisma:migrate:deploy
+    // && npm run start:prod) también invoca `prisma migrate deploy`, y este
     // exec la corre de nuevo acá. Si algún futuro cleanup de dependencias lo
     // mueve a devDependencies asumiendo que es "solo una CLI de build", esto
     // rompe en producción si el entorno de deploy alguna vez podara

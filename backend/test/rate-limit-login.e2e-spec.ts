@@ -152,9 +152,10 @@ describe('Rate limiting en POST /auth/mfa/verify (e2e)', () => {
  * getLoginTracker decide contra qué IP se cuenta el límite de intentos.
  * X-Forwarded-For es una lista que cada proxy AGREGA al final: el primer
  * valor lo pone el cliente (falsificable por cualquiera que arme el request
- * a mano) y el último es el que agregó el único proxy confiable (Railway).
- * Usar el valor equivocado (el primero) deja el rate limiting completamente
- * evadible por cualquier atacante que no pase por un navegador — por eso
+ * a mano) y el último es el que agregó el proxy confiable (con un único
+ * proxy de edge delante, ej. sin CDN). Usar el valor equivocado (el primero)
+ * deja el rate limiting completamente evadible por cualquier atacante que
+ * no pase por un navegador — por eso
  * esto se prueba directo, sin depender de que algún test e2e lo ejercite de
  * forma indirecta.
  */
@@ -190,5 +191,35 @@ describe('getLoginTracker (unit)', () => {
         ip: '10.0.0.5',
       }),
     ).toBe('203.0.113.7');
+  });
+
+  // Render detrás de Cloudflare (verificado contra un deploy real): 3
+  // proxies confiables agregan un hop cada uno. El primer valor de la lista
+  // es el que agregó Cloudflare (la IP real del cliente, no falsificable) —
+  // "el último" (comportamiento de un solo proxy confiable) ya no sirve acá.
+  it('con trustedProxyHops=3 (Render+Cloudflare) usa el primer valor, no el último', () => {
+    expect(
+      getLoginTracker(
+        {
+          headers: {
+            'x-forwarded-for': '198.51.100.7, 172.68.174.254, 10.27.164.133',
+          },
+          ip: '127.0.0.1',
+        },
+        3,
+      ),
+    ).toBe('198.51.100.7');
+  });
+
+  it('con trustedProxyHops mayor a la cantidad de valores, cae al primero en vez de romper', () => {
+    expect(
+      getLoginTracker(
+        {
+          headers: { 'x-forwarded-for': '198.51.100.7' },
+          ip: '127.0.0.1',
+        },
+        3,
+      ),
+    ).toBe('198.51.100.7');
   });
 });

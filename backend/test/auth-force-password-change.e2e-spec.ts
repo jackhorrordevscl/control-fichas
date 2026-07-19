@@ -7,6 +7,10 @@ import { App } from 'supertest/types';
 import * as argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  SEED_ADMIN_EMAIL_DEFAULT,
+  SEED_ADMIN_PASSWORD_DEFAULT,
+} from '../prisma/seed-admin.defaults';
 
 /**
  * T4.4 (issue #22): el admin semilla (mustChangePassword=true) no puede
@@ -17,26 +21,18 @@ import { PrismaService } from '../src/prisma/prisma.service';
  * token de sesión (jwt.strategy.ts lo rechaza explícitamente, igual que el
  * setupToken de MFA).
  *
- * ADMIN_EMAIL/ADMIN_PASSWORD se leen de env (ver
- * auth-mfa-enforcement.e2e-spec.ts) para no repetir el literal y disparar
+ * ADMIN_EMAIL/ADMIN_PASSWORD se leen de env con fallback al mismo default que
+ * el seed (ver auth-mfa-enforcement.e2e-spec.ts y prisma/seed-admin.defaults.ts):
+ * corre en local sin configuración y sin repetir el literal acá, evitando los
  * falsos positivos de secret scanning.
  */
-function requiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(
-      `Falta ${name} en el entorno de test (ver backend/.env) — requerido para autenticar al ADMIN seedeado.`,
-    );
-  }
-  return value;
-}
-
 describe('Cambio de contraseña forzado del admin semilla (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
 
-  const ADMIN_EMAIL = requiredEnv('SEED_ADMIN_EMAIL');
-  const ADMIN_PASSWORD = requiredEnv('SEED_ADMIN_PASSWORD');
+  const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? SEED_ADMIN_EMAIL_DEFAULT;
+  const ADMIN_PASSWORD =
+    process.env.SEED_ADMIN_PASSWORD ?? SEED_ADMIN_PASSWORD_DEFAULT;
   const NEW_PASSWORD = 'NewStrongPass456!';
 
   beforeAll(async () => {
