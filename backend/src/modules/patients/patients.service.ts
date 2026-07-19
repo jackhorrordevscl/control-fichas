@@ -23,7 +23,15 @@ function emptyConsentStatus(): ConsentStatusMap {
 export class PatientsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreatePatientDto, therapistId: string) {
+  // T6.4 (issue #51): ADMIN no tiene acceso a datos clínicos bajo ningún
+  // escenario -- ni siquiera pudiendo crear un paciente y quedar como su
+  // therapistId, que de todos modos no podría ver después (findOne lo
+  // bloquea de forma incondicional, sin importar ownership). Se corta acá
+  // en vez de dejar que cree registros huérfanos que nadie puede gestionar.
+  async create(dto: CreatePatientDto, therapistId: string, userRole: string) {
+    if (userRole === 'ADMIN') {
+      throw new ForbiddenException('El rol ADMIN no tiene acceso a fichas clínicas');
+    }
     return this.prisma.patient.create({
       data: {
         ...dto,
@@ -64,9 +72,18 @@ export class PatientsService {
     return map;
   }
 
+  // T6.4 (issue #51): ADMIN es un rol operativo/técnico sin base clínica
+  // para ver datos de pacientes -- perdió el acceso irrestricto que tenía
+  // antes junto con DIRECTOR/SUPERVISOR. SUPERVISOR (ex-DIRECTOR) conserva
+  // visión ampliada, pero ahora condicionada al consentimiento HEALTH_NETWORK
+  // del paciente (ver findOne) salvo que sea además el terapeuta tratante.
   async findAll(userId: string, userRole: string) {
+    if (userRole === 'ADMIN') {
+      throw new ForbiddenException('El rol ADMIN no tiene acceso a fichas clínicas');
+    }
+
     let patients;
-    if (userRole === 'DIRECTOR' || userRole === 'ADMIN' || userRole === 'COORDINATOR') {
+    if (userRole === 'SUPERVISOR') {
       patients = await this.prisma.patient.findMany({
         where: { deletedAt: null },
         include: { therapist: { select: { id: true, name: true } } },
@@ -80,7 +97,17 @@ export class PatientsService {
     }
 
     const consentMap = await this.getConsentStatusMap(patients.map((p) => p.id));
-    return patients.map((p) => ({
+
+    // COORDINATOR/THERAPIST ya vienen filtrados a los propios por el query
+    // de arriba (isOwner siempre true para ellos acá), así que este filtro
+    // solo tiene efecto real sobre SUPERVISOR.
+    const visible = patients.filter((p) => {
+      if (p.therapistId === userId) return true;
+      const consents = consentMap.get(p.id) ?? emptyConsentStatus();
+      return userRole === 'SUPERVISOR' && consents.HEALTH_NETWORK;
+    });
+
+    return visible.map((p) => ({
       ...p,
       consents: consentMap.get(p.id) ?? emptyConsentStatus(),
     }));
@@ -102,23 +129,44 @@ export class PatientsService {
       },
     });
     if (!patient) throw new NotFoundException('Paciente no encontrado');
-    if (userRole === 'COORDINATOR' && patient.therapistId !== userId) {
-      throw new ForbiddenException(
-        'Como Coordinador solo puedes ver la ficha clínica de tus propios pacientes',
-      );
+
+    if (userRole === 'ADMIN') {
+      throw new ForbiddenException('El rol ADMIN no tiene acceso a fichas clínicas');
     }
-    if (
-      userRole !== 'DIRECTOR' &&
-      userRole !== 'ADMIN' &&
-      userRole !== 'COORDINATOR' &&
-      patient.therapistId !== userId
-    ) {
-      throw new ForbiddenException('Acceso denegado a este paciente');
+
+    const isOwner = patient.therapistId === userId;
+
+    // La relación de tratamiento directa (isOwner) siempre da acceso, sin
+    // importar el consentimiento de Red de Salud -- ese consentimiento
+    // regula compartir la ficha con terceros FUERA de esa relación (Ley
+    // 21.719), no la relación en sí, que se sostiene por otra base legal
+    // (Ley 20.584).
+    if (!isOwner) {
+      if (userRole === 'COORDINATOR') {
+        throw new ForbiddenException(
+          'Como Coordinador solo puedes ver la ficha clínica de tus propios pacientes',
+        );
+      }
+      if (userRole !== 'SUPERVISOR') {
+        throw new ForbiddenException('Acceso denegado a este paciente');
+      }
     }
+
     // T6.1: las tres ramas de acceso necesitan el mismo cálculo de estado de
     // consentimiento, así que se calcula una sola vez acá en vez de repetirlo
     // en cada return.
     const consents = (await this.getConsentStatusMap([id])).get(id) ?? emptyConsentStatus();
+
+    // T6.4 (issue #51): SUPERVISOR sin relación de tratamiento directa queda
+    // sujeto al consentimiento HEALTH_NETWORK -- antes veía cualquier ficha
+    // sin restricción, igual que ADMIN. El acceso excepcional auditado sin
+    // este consentimiento es responsabilidad de T6.5 (#52), no de esta ruta.
+    if (!isOwner && userRole === 'SUPERVISOR' && !consents.HEALTH_NETWORK) {
+      throw new ForbiddenException(
+        'Acceso denegado: el paciente no ha otorgado consentimiento de Red de Salud',
+      );
+    }
+
     return { ...patient, consents };
   }
 
@@ -202,8 +250,16 @@ export class PatientsService {
 
   // T6.1 (issue #27): registra un evento de otorgamiento/revocación para una
   // finalidad puntual. findOne aplica el mismo control de acceso que el
-  // resto de las mutaciones del módulo (dueño THERAPIST/COORDINATOR o
-  // DIRECTOR/ADMIN sin restricción).
+  // resto de las mutaciones del módulo (dueño, o SUPERVISOR si el
+  // consentimiento HEALTH_NETWORK ya está otorgado -- T6.4, issue #51).
+  //
+  // Caso borde conocido, sin resolver acá: un SUPERVISOR sin relación
+  // directa no puede usar esta ruta para otorgar el primer HEALTH_NETWORK de
+  // un paciente que todavía no lo tiene, porque findOne lo bloquea antes de
+  // llegar a este método. En la práctica quien registra consentimiento casi
+  // siempre es el terapeuta tratante (isOwner=true, sin este problema); el
+  // acceso excepcional de T6.5 (#52) es la vía prevista para el caso
+  // contrario.
   async recordConsent(
     id: string,
     dto: RecordConsentDto,

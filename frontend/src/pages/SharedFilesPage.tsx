@@ -182,11 +182,11 @@ export default function SharedFilesPage() {
   );
 
   const canEdit = (file: SharedFile) =>
-    ['DIRECTOR', 'ADMIN'].includes(user?.role) ||
+    ['SUPERVISOR', 'ADMIN'].includes(user?.role) ||
     file.uploadedBy?.name === user?.name;
 
   const canDelete = (file: SharedFile) =>
-    ['DIRECTOR', 'ADMIN'].includes(user?.role) ||
+    ['SUPERVISOR', 'ADMIN'].includes(user?.role) ||
     file.uploadedBy?.name === user?.name;
 
   return (

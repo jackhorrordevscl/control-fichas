@@ -2,7 +2,7 @@ import { IsEmail, IsString, MinLength, IsEnum, IsOptional } from 'class-validato
 
 export enum UserRole {
   ADMIN = 'ADMIN',
-  DIRECTOR = 'DIRECTOR',
+  SUPERVISOR = 'SUPERVISOR',
   COORDINATOR = 'COORDINATOR',
   THERAPIST = 'THERAPIST',
 }

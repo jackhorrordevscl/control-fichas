@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -23,7 +28,13 @@ export class ConsultationsService {
     private patientsService: PatientsService,
   ) {}
 
-  async create(dto: CreateConsultationDto, therapistId: string) {
+  // T6.4 (issue #51): mismo motivo que PatientsService.create -- ADMIN no
+  // tiene acceso a datos clínicos bajo ningún escenario, ni siquiera
+  // creando una consulta que de todos modos no podría ver después.
+  async create(dto: CreateConsultationDto, therapistId: string, userRole: string) {
+    if (userRole === 'ADMIN') {
+      throw new ForbiddenException('El rol ADMIN no tiene acceso a fichas clínicas');
+    }
     let patientRut = dto.patientRut ?? '';
     if (!patientRut && dto.patientId) {
       const patient = await this.prisma.patient.findUnique({

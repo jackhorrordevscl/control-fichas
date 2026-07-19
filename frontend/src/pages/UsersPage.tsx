@@ -15,7 +15,7 @@ interface UserItem {
 const ROLES = [
   { value: 'THERAPIST', label: 'Terapeuta' },
   { value: 'COORDINATOR', label: 'Coordinador/a' },
-  { value: 'DIRECTOR', label: 'Director/a' },
+  { value: 'SUPERVISOR', label: 'Supervisor/a' },
   { value: 'ADMIN', label: 'Administrador' },
 ];
 
@@ -24,7 +24,7 @@ const roleLabel = (role: string) => ROLES.find(r => r.value === role)?.label ?? 
 const roleBadge = (role: string) => {
   switch (role) {
     case 'ADMIN':       return 'bg-purple-50 text-purple-700';
-    case 'DIRECTOR':    return 'bg-indigo-50 text-indigo-700';
+    case 'SUPERVISOR':  return 'bg-indigo-50 text-indigo-700';
     case 'COORDINATOR': return 'bg-blue-50 text-blue-700';
     default:            return 'bg-sage-50 text-sage-700';
   }
@@ -33,13 +33,13 @@ const roleBadge = (role: string) => {
 const roleIcon = (role: string) => {
   switch (role) {
     case 'ADMIN':       return <Shield size={16} className="text-purple-600" />;
-    case 'DIRECTOR':    return <Crown size={16} className="text-indigo-600" />;
+    case 'SUPERVISOR':  return <Crown size={16} className="text-indigo-600" />;
     case 'COORDINATOR': return <Users size={16} className="text-blue-600" />;
     default:            return <User size={16} className="text-sage-600" />;
   }
 };
 
-const CAN_EDIT_ROLES = ['ADMIN', 'DIRECTOR', 'COORDINATOR'];
+const CAN_EDIT_ROLES = ['ADMIN', 'SUPERVISOR', 'COORDINATOR'];
 
 export default function UsersPage() {
   const queryClient = useQueryClient();

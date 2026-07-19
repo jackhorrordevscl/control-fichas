@@ -72,10 +72,10 @@ export class SharedFilesService {
 
   async deleteFile(id: string, userId: string, userRole: Role) {
     const file = await this.findOne(id);
-    // Solo el uploader, DIRECTOR o ADMIN pueden eliminar
+    // Solo el uploader, SUPERVISOR o ADMIN pueden eliminar
     const canDelete =
       file.uploadedById === userId ||
-      userRole === 'DIRECTOR' ||
+      userRole === 'SUPERVISOR' ||
       userRole === 'ADMIN';
     if (!canDelete) {
       throw new ForbiddenException('No tienes permiso para eliminar este archivo');
@@ -97,7 +97,7 @@ export class SharedFilesService {
     const file = await this.findOne(id);
     const canEdit =
       file.uploadedById === userId ||
-      userRole === 'DIRECTOR' ||
+      userRole === 'SUPERVISOR' ||
       userRole === 'ADMIN';
     if (!canEdit) throw new ForbiddenException('Sin permiso para editar');
 

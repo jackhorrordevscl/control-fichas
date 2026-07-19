@@ -10,7 +10,7 @@ import * as QRCode from 'qrcode';
 import { Role, User } from '@prisma/client';
 
 // Roles administrativos: no pueden operar sin MFA (T4.1 / issue #19).
-const MFA_REQUIRED_ROLES: Role[] = [Role.ADMIN, Role.DIRECTOR];
+const MFA_REQUIRED_ROLES: Role[] = [Role.ADMIN, Role.SUPERVISOR];
 
 // Purpose que llevan los JWT de corta duración emitidos para forzar el
 // enrolamiento MFA. Nunca deben aceptarse como sesión (ver jwt.strategy.ts).

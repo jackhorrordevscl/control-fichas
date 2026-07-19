@@ -23,7 +23,7 @@ export class PatientsController {
   @UseGuards(JwtAuthGuard)
   @Post()
   create(@Body() dto: CreatePatientDto, @CurrentUser() user: any) {
-    return this.patientsService.create(dto, user.id);
+    return this.patientsService.create(dto, user.id, user.role);
   }
 
   @UseGuards(JwtAuthGuard)

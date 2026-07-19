@@ -17,7 +17,14 @@ import {
  * PatientsService.findOne(patientId, userId, userRole):
  *   - el dueño (THERAPIST con patient.therapistId === userId) accede (2xx)
  *   - un THERAPIST sin relación con el paciente recibe 403
- *   - ADMIN accede sin restricción (2xx)
+ *
+ * T6.4 (issue #51) cambió el modelo de acceso elevado:
+ *   - ADMIN ya NO tiene acceso a datos clínicos de pacientes, bajo ningún
+ *     escenario -- rol operativo/técnico, sin base clínica.
+ *   - DIRECTOR se renombró a SUPERVISOR, y su acceso sin relación de
+ *     tratamiento directa ahora depende del consentimiento HEALTH_NETWORK
+ *     vigente del paciente (antes veía todo sin restricción, igual que
+ *     ADMIN). Ver describe('SUPERVISOR y consentimiento Red de Salud').
  *
  * Los fixtures (usuarios, paciente, consulta, documentos) se crean en
  * beforeAll con emails únicos por corrida (sufijo Date.now()) para que la
@@ -39,10 +46,12 @@ describe('RBAC ownership guard (e2e)', () => {
   const TEST_PASSWORD = 'TestPass123!';
 
   let adminToken: string;
+  let supervisorToken: string;
   let therapistAToken: string;
   let therapistBToken: string;
   let therapistAId: string;
   let therapistBId: string;
+  let supervisorId: string;
 
   let patientId: string;
   let consultationId: string;
@@ -129,6 +138,50 @@ describe('RBAC ownership guard (e2e)', () => {
       .expect(201);
     therapistBId = therapistBCreate.body.id;
 
+    // 2b. Crear un usuario SUPERVISOR de prueba (T6.4, issue #51): su acceso
+    // a pacientes sin relación de tratamiento directa depende del
+    // consentimiento HEALTH_NETWORK, a diferencia de ADMIN (sin acceso) y
+    // del propio SUPERVISOR cuando sí es el terapeuta tratante.
+    const supervisorEmail = `rbac.supervisor.${runId}@umbral.cl`;
+    const supervisorCreate = await request(app.getHttpServer())
+      .post('/api/v1/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        email: supervisorEmail,
+        password: TEST_PASSWORD,
+        name: 'RBAC Supervisor',
+        role: 'SUPERVISOR',
+      })
+      .expect(201);
+    supervisorId = supervisorCreate.body.id;
+
+    // SUPERVISOR también requiere enrolamiento MFA forzado (T4.1), igual que
+    // ADMIN -- mismo flujo login -> setup/begin -> setup/confirm.
+    const supervisorLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: supervisorEmail, password: TEST_PASSWORD })
+      .expect(201);
+    expect(supervisorLogin.body.requiresMfaSetup).toBe(true);
+
+    const supervisorBeginSetup = await request(app.getHttpServer())
+      .post('/api/v1/auth/mfa/setup/begin')
+      .send({ setupToken: supervisorLogin.body.setupToken })
+      .expect(201);
+
+    const supervisorTotp = speakeasy.totp({
+      secret: supervisorBeginSetup.body.secret,
+      encoding: 'base32',
+    });
+
+    const supervisorConfirmSetup = await request(app.getHttpServer())
+      .post('/api/v1/auth/mfa/setup/confirm')
+      .send({
+        setupToken: supervisorLogin.body.setupToken,
+        token: supervisorTotp,
+      })
+      .expect(201);
+    supervisorToken = supervisorConfirmSetup.body.accessToken;
+
     // 3. Login como cada terapeuta
     const loginA = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
@@ -191,8 +244,14 @@ describe('RBAC ownership guard (e2e)', () => {
           }
         }
 
-        // Borrado respetando FKs: documentos/historial de consultas -> consultas -> paciente
+        // Borrado respetando FKs: documentos/consentimientos/historial de
+        // consultas -> consultas -> paciente. patientConsent se agrega acá
+        // (T6.4, issue #51): el describe de SUPERVISOR otorga HEALTH_NETWORK
+        // sobre este paciente, y PatientConsent.patientId es RESTRICT
+        // (ledger append-only, T6.1) -- sin este borrado previo, deleteMany
+        // del paciente falla con violación de FK.
         await prisma.patientDocument.deleteMany({ where: { patientId } });
+        await prisma.patientConsent.deleteMany({ where: { patientId } });
         await prisma.consultationHistory.deleteMany({
           where: { consultation: { patientId } },
         });
@@ -208,7 +267,7 @@ describe('RBAC ownership guard (e2e)', () => {
       // soft delete. Se limpia acá de la misma forma. `in: []` cuando ambos
       // ids quedan undefined no matchea nada (a diferencia de `id: undefined`
       // suelto), así que este filtro ya era seguro.
-      const idsToSoftDelete = [therapistAId, therapistBId].filter(Boolean);
+      const idsToSoftDelete = [therapistAId, therapistBId, supervisorId].filter(Boolean);
       if (idsToSoftDelete.length > 0) {
         await prisma.user.updateMany({
           where: { id: { in: idsToSoftDelete } },
@@ -254,11 +313,11 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
 
-    it('ADMIN accede sin restricción (2xx)', () => {
+    it('ADMIN recibe 403 (sin acceso a datos clínicos, T6.4)', () => {
       return request(app.getHttpServer())
         .get(`/api/v1/patients/${patientId}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200);
+        .expect(403);
     });
   });
 
@@ -285,14 +344,14 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
 
-    it('ADMIN puede subir un documento sin restricción (2xx)', () => {
+    it('ADMIN recibe 403 al intentar subir un documento (T6.4)', () => {
       return request(app.getHttpServer())
         .post('/api/v1/documents/upload')
         .set('Authorization', `Bearer ${adminToken}`)
         .field('patientId', patientId)
         .field('type', 'OTHER')
         .attach('file', Buffer.from('contenido de prueba'), 'test-admin.pdf')
-        .expect(201);
+        .expect(403);
     });
   });
 
@@ -311,11 +370,11 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
 
-    it('ADMIN accede sin restricción (2xx)', () => {
+    it('ADMIN recibe 403 (sin acceso a datos clínicos, T6.4)', () => {
       return request(app.getHttpServer())
         .get(`/api/v1/documents/patient/${patientId}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200);
+        .expect(403);
     });
   });
 
@@ -334,11 +393,11 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
 
-    it('ADMIN accede sin restricción (2xx)', () => {
+    it('ADMIN recibe 403 (sin acceso a datos clínicos, T6.4)', () => {
       return request(app.getHttpServer())
         .get(`/api/v1/documents/${ownerDocumentId}/download`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200);
+        .expect(403);
     });
   });
 
@@ -357,11 +416,11 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
 
-    it('ADMIN accede sin restricción (2xx)', () => {
+    it('ADMIN recibe 403 (sin acceso a datos clínicos, T6.4)', () => {
       return request(app.getHttpServer())
         .get(`/api/v1/consultations/patient/${patientId}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200);
+        .expect(403);
     });
   });
 
@@ -380,11 +439,11 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
 
-    it('ADMIN accede sin restricción (2xx)', () => {
+    it('ADMIN recibe 403 (sin acceso a datos clínicos, T6.4)', () => {
       return request(app.getHttpServer())
         .get(`/api/v1/consultations/${consultationId}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200);
+        .expect(403);
     });
   });
 
@@ -431,12 +490,12 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(409);
     });
 
-    it('ADMIN puede corregir la versión vigente sin restricción (2xx)', () => {
+    it('ADMIN recibe 403 al intentar corregir (T6.4)', () => {
       return request(app.getHttpServer())
         .patch(`/api/v1/consultations/${correctedId}/correct`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ consultReason: 'Motivo corregido por ADMIN' })
-        .expect(200);
+        .expect(403);
     });
   });
 
@@ -456,12 +515,83 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
 
-    it('ADMIN accede sin restricción (2xx)', () => {
+    it('ADMIN recibe 403 (sin acceso a datos clínicos, T6.4)', () => {
       return request(app.getHttpServer())
         .get(`/api/v1/reports/patient/${patientId}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200)
-        .expect('Content-Type', 'application/pdf');
+        .expect(403);
+    });
+  });
+
+  describe('SUPERVISOR y consentimiento Red de Salud (T6.4, issue #51)', () => {
+    it('sin relación directa y sin consentimiento HEALTH_NETWORK recibe 403 en findOne, y queda excluido de findAll', async () => {
+      await request(app.getHttpServer())
+        .get(`/api/v1/patients/${patientId}`)
+        .set('Authorization', `Bearer ${supervisorToken}`)
+        .expect(403);
+
+      // findAll (GET /patients, la lista) tiene su propia lógica de filtro
+      // en memoria -- no delega en findOne -- así que se prueba por
+      // separado: sin consentimiento, el paciente no debe aparecer ahí
+      // tampoco, no solo al pedirlo por id.
+      const list = await request(app.getHttpServer())
+        .get('/api/v1/patients')
+        .set('Authorization', `Bearer ${supervisorToken}`)
+        .expect(200);
+      expect(list.body.map((p: any) => p.id)).not.toContain(patientId);
+    });
+
+    it('con HEALTH_NETWORK otorgado (por el terapeuta dueño) accede vía findOne y aparece en findAll', async () => {
+      // Solo el dueño puede otorgar consentimiento acá: un SUPERVISOR sin
+      // acceso previo tampoco podría llamar a esta ruta (caso borde
+      // documentado en patients.service.ts, resuelto por T6.5/#52).
+      await request(app.getHttpServer())
+        .post(`/api/v1/patients/${patientId}/consents`)
+        .set('Authorization', `Bearer ${therapistAToken}`)
+        .send({
+          purpose: 'HEALTH_NETWORK',
+          action: 'GRANT',
+          evidence: 'Paciente autoriza compartir con la red de salud',
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .get(`/api/v1/patients/${patientId}`)
+        .set('Authorization', `Bearer ${supervisorToken}`)
+        .expect(200);
+
+      const list = await request(app.getHttpServer())
+        .get('/api/v1/patients')
+        .set('Authorization', `Bearer ${supervisorToken}`)
+        .expect(200);
+      expect(list.body.map((p: any) => p.id)).toContain(patientId);
+    });
+  });
+
+  describe('POST /patients y POST /consultations bloqueados para ADMIN (T6.4, issue #51)', () => {
+    it('POST /patients con ADMIN recibe 403', () => {
+      return request(app.getHttpServer())
+        .post('/api/v1/patients')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          fullName: 'Paciente Creado Por Admin',
+          rut: `ADMINCREATE${runId}`,
+          birthDate: '1990-01-01',
+        })
+        .expect(403);
+    });
+
+    it('POST /consultations con ADMIN recibe 403', () => {
+      return request(app.getHttpServer())
+        .post('/api/v1/consultations')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          patientId,
+          sessionDate: '2026-01-01',
+          consultReason: 'Intento de ADMIN',
+          intervention: 'Intento de ADMIN',
+        })
+        .expect(403);
     });
   });
 });
