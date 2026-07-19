@@ -23,7 +23,15 @@ function emptyConsentStatus(): ConsentStatusMap {
 export class PatientsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreatePatientDto, therapistId: string) {
+  // T6.4 (issue #51): ADMIN no tiene acceso a datos clínicos bajo ningún
+  // escenario -- ni siquiera pudiendo crear un paciente y quedar como su
+  // therapistId, que de todos modos no podría ver después (findOne lo
+  // bloquea de forma incondicional, sin importar ownership). Se corta acá
+  // en vez de dejar que cree registros huérfanos que nadie puede gestionar.
+  async create(dto: CreatePatientDto, therapistId: string, userRole: string) {
+    if (userRole === 'ADMIN') {
+      throw new ForbiddenException('El rol ADMIN no tiene acceso a fichas clínicas');
+    }
     return this.prisma.patient.create({
       data: {
         ...dto,

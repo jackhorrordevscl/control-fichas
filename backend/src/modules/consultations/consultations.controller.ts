@@ -20,7 +20,7 @@ export class ConsultationsController {
 
   @Post()
   create(@Body() dto: CreateConsultationDto, @CurrentUser() user: any) {
-    return this.consultationsService.create(dto, user.id);
+    return this.consultationsService.create(dto, user.id, user.role);
   }
 
   @Get('patient/:patientId')

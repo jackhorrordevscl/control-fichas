@@ -524,14 +524,24 @@ describe('RBAC ownership guard (e2e)', () => {
   });
 
   describe('SUPERVISOR y consentimiento Red de Salud (T6.4, issue #51)', () => {
-    it('sin relación directa y sin consentimiento HEALTH_NETWORK recibe 403', () => {
-      return request(app.getHttpServer())
+    it('sin relación directa y sin consentimiento HEALTH_NETWORK recibe 403 en findOne, y queda excluido de findAll', async () => {
+      await request(app.getHttpServer())
         .get(`/api/v1/patients/${patientId}`)
         .set('Authorization', `Bearer ${supervisorToken}`)
         .expect(403);
+
+      // findAll (GET /patients, la lista) tiene su propia lógica de filtro
+      // en memoria -- no delega en findOne -- así que se prueba por
+      // separado: sin consentimiento, el paciente no debe aparecer ahí
+      // tampoco, no solo al pedirlo por id.
+      const list = await request(app.getHttpServer())
+        .get('/api/v1/patients')
+        .set('Authorization', `Bearer ${supervisorToken}`)
+        .expect(200);
+      expect(list.body.map((p: any) => p.id)).not.toContain(patientId);
     });
 
-    it('con HEALTH_NETWORK otorgado (por el terapeuta dueño) accede (2xx)', async () => {
+    it('con HEALTH_NETWORK otorgado (por el terapeuta dueño) accede vía findOne y aparece en findAll', async () => {
       // Solo el dueño puede otorgar consentimiento acá: un SUPERVISOR sin
       // acceso previo tampoco podría llamar a esta ruta (caso borde
       // documentado en patients.service.ts, resuelto por T6.5/#52).
@@ -549,6 +559,39 @@ describe('RBAC ownership guard (e2e)', () => {
         .get(`/api/v1/patients/${patientId}`)
         .set('Authorization', `Bearer ${supervisorToken}`)
         .expect(200);
+
+      const list = await request(app.getHttpServer())
+        .get('/api/v1/patients')
+        .set('Authorization', `Bearer ${supervisorToken}`)
+        .expect(200);
+      expect(list.body.map((p: any) => p.id)).toContain(patientId);
+    });
+  });
+
+  describe('POST /patients y POST /consultations bloqueados para ADMIN (T6.4, issue #51)', () => {
+    it('POST /patients con ADMIN recibe 403', () => {
+      return request(app.getHttpServer())
+        .post('/api/v1/patients')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          fullName: 'Paciente Creado Por Admin',
+          rut: `ADMINCREATE${runId}`,
+          birthDate: '1990-01-01',
+        })
+        .expect(403);
+    });
+
+    it('POST /consultations con ADMIN recibe 403', () => {
+      return request(app.getHttpServer())
+        .post('/api/v1/consultations')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          patientId,
+          sessionDate: '2026-01-01',
+          consultReason: 'Intento de ADMIN',
+          intervention: 'Intento de ADMIN',
+        })
+        .expect(403);
     });
   });
 });
