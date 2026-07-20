@@ -594,4 +594,114 @@ describe('RBAC ownership guard (e2e)', () => {
         .expect(403);
     });
   });
+
+  describe('Acceso excepcional de SUPERVISOR (T6.5, issue #52)', () => {
+    // Paciente propio, sin consentimientos -- separado del `patientId`
+    // compartido de arriba, que ya quedó con HEALTH_NETWORK otorgado por el
+    // describe de T6.4.
+    let overridePatientId: string;
+    const overrideRut = `T65${runId}`;
+
+    beforeAll(async () => {
+      const create = await request(app.getHttpServer())
+        .post('/api/v1/patients')
+        .set('Authorization', `Bearer ${therapistAToken}`)
+        .send({
+          fullName: 'Paciente Sin Consentimiento Red De Salud',
+          rut: overrideRut,
+          birthDate: '1990-01-01',
+        })
+        .expect(201);
+      overridePatientId = create.body.id;
+    });
+
+    afterAll(async () => {
+      await prisma.patientConsent.deleteMany({
+        where: { patientId: overridePatientId },
+      });
+      await prisma.patient.deleteMany({ where: { id: overridePatientId } });
+    });
+
+    describe('GET /patients/by-rut/:rut', () => {
+      it('THERAPIST recibe 403 (ruta restringida a SUPERVISOR)', () => {
+        return request(app.getHttpServer())
+          .get(`/api/v1/patients/by-rut/${overrideRut}`)
+          .set('Authorization', `Bearer ${therapistAToken}`)
+          .expect(403);
+      });
+
+      it('RUT inexistente devuelve 404', () => {
+        return request(app.getHttpServer())
+          .get(`/api/v1/patients/by-rut/NOEXISTE${runId}`)
+          .set('Authorization', `Bearer ${supervisorToken}`)
+          .expect(404);
+      });
+
+      it('SUPERVISOR sin consentimiento recibe 403 con el id del paciente en el body', async () => {
+        const res = await request(app.getHttpServer())
+          .get(`/api/v1/patients/by-rut/${overrideRut}`)
+          .set('Authorization', `Bearer ${supervisorToken}`)
+          .expect(403);
+        // Sin este id, el frontend no tiene forma de llamar a
+        // access-override -- el RUT tipeado por el usuario no alcanza.
+        expect(res.body.patientId).toBe(overridePatientId);
+      });
+    });
+
+    describe('POST /patients/:id/access-override', () => {
+      it('THERAPIST recibe 403 (ruta restringida a SUPERVISOR)', () => {
+        return request(app.getHttpServer())
+          .post(`/api/v1/patients/${overridePatientId}/access-override`)
+          .set('Authorization', `Bearer ${therapistAToken}`)
+          .send({ overrideReason: 'Intento no autorizado de override' })
+          .expect(403);
+      });
+
+      it('rechaza motivo menor a 10 caracteres (400)', () => {
+        return request(app.getHttpServer())
+          .post(`/api/v1/patients/${overridePatientId}/access-override`)
+          .set('Authorization', `Bearer ${supervisorToken}`)
+          .send({ overrideReason: 'corto' })
+          .expect(400);
+      });
+
+      it('rechaza sin motivo (400)', () => {
+        return request(app.getHttpServer())
+          .post(`/api/v1/patients/${overridePatientId}/access-override`)
+          .set('Authorization', `Bearer ${supervisorToken}`)
+          .send({})
+          .expect(400);
+      });
+
+      it('con motivo válido accede (2xx), sin dejar la ruta normal abierta, y queda auditado', async () => {
+        const reason = 'Revisión por denuncia recibida, T6.5 issue #52';
+
+        const res = await request(app.getHttpServer())
+          .post(`/api/v1/patients/${overridePatientId}/access-override`)
+          .set('Authorization', `Bearer ${supervisorToken}`)
+          .send({ overrideReason: reason })
+          .expect(201);
+        expect(res.body.id).toBe(overridePatientId);
+
+        // El override es una excepción puntual, no una sesión: GET
+        // /patients/:id normal debe seguir bloqueando después, sin bypass
+        // implícito.
+        await request(app.getHttpServer())
+          .get(`/api/v1/patients/${overridePatientId}`)
+          .set('Authorization', `Bearer ${supervisorToken}`)
+          .expect(403);
+
+        // AuditInterceptor adjunta overrideReason al log automático del
+        // POST -- se verifica que quede la fila, distinguible de un acceso
+        // normal (que siempre tiene overrideReason null).
+        const auditRow = await prisma.auditLog.findFirst({
+          where: { resourceId: overridePatientId, overrideReason: { not: null } },
+          orderBy: { createdAt: 'desc' },
+        });
+        expect(auditRow).not.toBeNull();
+        expect(auditRow?.overrideReason).toBe(reason);
+        expect(auditRow?.userId).toBeDefined();
+      });
+    });
+  });
 });

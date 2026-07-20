@@ -113,7 +113,11 @@ export class PatientsService {
     }));
   }
 
-  async findOne(id: string, userId: string, userRole: string) {
+  // Fetch compartido por findOne y accessOverride (T6.5, #52): misma forma
+  // de datos (paciente + consultas vigentes + documentos + consentimientos),
+  // sin decidir todavía si el llamante tiene permiso -- eso es
+  // responsabilidad de cada método, que aplica su propia regla de acceso.
+  private async fetchPatientWithConsents(id: string) {
     const patient = await this.prisma.patient.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -129,6 +133,13 @@ export class PatientsService {
       },
     });
     if (!patient) throw new NotFoundException('Paciente no encontrado');
+
+    const consents = (await this.getConsentStatusMap([id])).get(id) ?? emptyConsentStatus();
+    return { patient, consents };
+  }
+
+  async findOne(id: string, userId: string, userRole: string) {
+    const { patient, consents } = await this.fetchPatientWithConsents(id);
 
     if (userRole === 'ADMIN') {
       throw new ForbiddenException('El rol ADMIN no tiene acceso a fichas clínicas');
@@ -152,15 +163,11 @@ export class PatientsService {
       }
     }
 
-    // T6.1: las tres ramas de acceso necesitan el mismo cálculo de estado de
-    // consentimiento, así que se calcula una sola vez acá en vez de repetirlo
-    // en cada return.
-    const consents = (await this.getConsentStatusMap([id])).get(id) ?? emptyConsentStatus();
-
     // T6.4 (issue #51): SUPERVISOR sin relación de tratamiento directa queda
     // sujeto al consentimiento HEALTH_NETWORK -- antes veía cualquier ficha
-    // sin restricción, igual que ADMIN. El acceso excepcional auditado sin
-    // este consentimiento es responsabilidad de T6.5 (#52), no de esta ruta.
+    // sin restricción, igual que ADMIN. accessOverride (T6.5, #52) es la
+    // única vía para sortear este bloqueo, y deja motivo auditado -- esta
+    // ruta nunca lo hace de forma implícita.
     if (!isOwner && userRole === 'SUPERVISOR' && !consents.HEALTH_NETWORK) {
       throw new ForbiddenException(
         'Acceso denegado: el paciente no ha otorgado consentimiento de Red de Salud',
@@ -168,6 +175,63 @@ export class PatientsService {
     }
 
     return { ...patient, consents };
+  }
+
+  // T6.5 (issue #52): única vía para que SUPERVISOR acceda a una ficha sin
+  // relación de tratamiento directa y sin consentimiento HEALTH_NETWORK
+  // vigente -- pensada para supervisión clínica legítima (incidentes,
+  // auditorías internas, denuncias) que findOne bloquearía de otro modo.
+  // El motivo queda auditado por AuditInterceptor (lee `overrideReason` del
+  // body de forma genérica, ver audit.interceptor.ts), no acá: este método
+  // no hace su propio log explícito para no duplicar la fila que el
+  // interceptor ya genera para cualquier request autenticado.
+  //
+  // No repite el chequeo de ADMIN/COORDINATOR/THERAPIST de findOne a
+  // propósito: el guard del controller (@Roles('SUPERVISOR')) ya garantiza
+  // que solo SUPERVISOR llega acá. Si algún otro rol necesitara esta vía en
+  // el futuro, el chequeo de rol tendría que agregarse acá también, no solo
+  // en el guard.
+  async accessOverride(id: string) {
+    const { patient, consents } = await this.fetchPatientWithConsents(id);
+    return { ...patient, consents };
+  }
+
+  // T6.5 (issue #52): única vía para que SUPERVISOR ubique una ficha que no
+  // aparece en su findAll (excluida por falta de consentimiento
+  // HEALTH_NETWORK) y así pueda disparar accessOverride sobre su id. Resuelve
+  // el RUT a un id y delega el resto por completo en findOne -- misma regla
+  // de acceso, ningún atajo nuevo. Restringido a SUPERVISOR (guard del
+  // controller) a propósito: THERAPIST/COORDINATOR ya tienen su búsqueda
+  // funcionando sobre la lista que su propio findAll les devuelve, y
+  // exponerles esta ruta agregaría una forma de confirmar si un RUT
+  // cualquiera pertenece a algún paciente de la clínica, sin necesitarlo.
+  async findByRut(rut: string, userId: string, userRole: string) {
+    const patient = await this.prisma.patient.findFirst({
+      where: { rut: normalizeRut(rut), deletedAt: null },
+      select: { id: true },
+    });
+    if (!patient) throw new NotFoundException('Paciente no encontrado');
+
+    try {
+      return await this.findOne(patient.id, userId, userRole);
+    } catch (err) {
+      // Esta ruta es SUPERVISOR-only (guard del controller): a diferencia
+      // de findOne llamado desde cualquier otro lado, acá el único motivo
+      // posible de un 403 es el gate de consentimiento HEALTH_NETWORK (un
+      // SUPERVISOR nunca cae en las ramas de COORDINATOR/THERAPIST/ADMIN de
+      // findOne). Se re-lanza con el id incluido para que el frontend pueda
+      // ofrecer el acceso excepcional (accessOverride, T6.5/#52) sin tener
+      // que adivinar el id -- el RUT que el usuario tipeó no alcanza por sí
+      // solo para eso.
+      if (err instanceof ForbiddenException) {
+        throw new ForbiddenException({
+          message:
+            'Acceso denegado: el paciente no ha otorgado consentimiento de Red de Salud',
+          patientId: patient.id,
+        });
+      }
+      throw err;
+    }
   }
 
   async update(id: string, dto: UpdatePatientDto, userId: string, userRole?: string) {

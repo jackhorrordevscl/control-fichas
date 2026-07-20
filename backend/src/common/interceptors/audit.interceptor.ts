@@ -39,6 +39,15 @@ export class AuditInterceptor implements NestInterceptor {
     const action = actionMap[method] ?? 'VIEW';
     const resource = getResourceFromUrl(url);
 
+    // T6.5 (issue #52): si el request trae `overrideReason` (body o query),
+    // se adjunta al mismo log automático de esta acción -- genérico, no
+    // acoplado a la ruta de acceso excepcional en particular. Cualquier
+    // otro endpoint que en el futuro necesite el mismo patrón de "acción
+    // excepcional con motivo auditado" lo obtiene gratis con solo mandar
+    // ese campo.
+    const overrideReason: string | undefined =
+      request.body?.overrideReason ?? request.query?.overrideReason;
+
     return next.handle().pipe(
       tap(() => {
         // Registra después de que la respuesta fue exitosa. Si falla, el
@@ -54,6 +63,7 @@ export class AuditInterceptor implements NestInterceptor {
             detail: `${method} ${url}`,
             ipAddress,
             userAgent,
+            overrideReason,
           })
           .catch((err) => {
             this.logger.error(
