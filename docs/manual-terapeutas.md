@@ -9,7 +9,7 @@
 Al ingresar por primera vez con una cuenta nueva, pueden pasar hasta tres pasos antes de llegar al panel principal — no todos ocurren siempre, dependen del estado de tu cuenta:
 
 1. **Cambio de contraseña obligatorio** (solo si tu cuenta se creó con una contraseña provisoria). No vas a poder hacer nada más hasta cambiarla.
-2. **Activación de MFA obligatoria** (solo para roles `ADMIN` y `DIRECTOR`). Se te muestra un código QR para escanear con una app autenticadora (Google Authenticator, Authy, etc.). Sin esto, esas cuentas no pueden operar — es una exigencia de seguridad para roles administrativos, no opcional.
+2. **Activación de MFA obligatoria** (solo para roles `ADMIN` y `SUPERVISOR`). Se te muestra un código QR para escanear con una app autenticadora (Google Authenticator, Authy, etc.). Sin esto, esas cuentas no pueden operar — es una exigencia de seguridad para roles administrativos, no opcional.
 3. **Verificación MFA** (en logins posteriores, si ya tenés MFA activado): se te pide el código de 6 dígitos de tu app autenticadora antes de entrar.
 
 Los roles `THERAPIST` y `COORDINATOR` no están obligados a activar MFA, aunque pueden hacerlo desde Configuración si quieren.
@@ -28,10 +28,18 @@ La app tiene cuatro roles. Esto determina qué pacientes ves, no es solo un tema
 |---|---|---|
 | `THERAPIST` | Solo los propios (de los que es terapeuta a cargo) | Intentar acceder a la ficha de un paciente ajeno da error de acceso denegado (403), no un error genérico |
 | `COORDINATOR` | Solo los propios, igual que `THERAPIST` | A pesar del nombre del rol, **no tiene visión ampliada** de pacientes — es una restricción deliberada del sistema |
-| `DIRECTOR` | Todos los pacientes de la institución | Sin restricción de ficha |
-| `ADMIN` | Todos los pacientes de la institución | Sin restricción de ficha, además administra usuarios |
+| `SUPERVISOR` | Los propios siempre; el resto de la institución **solo si el paciente otorgó consentimiento de Red de Salud (`HEALTH_NETWORK`)** | Sin ese consentimiento, la ficha no aparece en su listado. Puede acceder de todos modos con **acceso excepcional auditado** (ver más abajo), dejando motivo obligatorio registrado |
+| `ADMIN` | **Ninguno** — no tiene acceso a fichas clínicas bajo ningún escenario | Es un rol operativo/técnico sin base clínica para ver datos de pacientes; administra usuarios, no fichas |
 
-La gestión de usuarios (crear, editar, desactivar) está reservada a `ADMIN`, `DIRECTOR` y `COORDINATOR` — un `THERAPIST` no ve esa sección.
+La gestión de usuarios (crear, editar, desactivar) está reservada a `ADMIN`, `SUPERVISOR` y `COORDINATOR` — un `THERAPIST` no ve esa sección.
+
+### Acceso excepcional de SUPERVISOR (T6.5)
+
+Cuando un `SUPERVISOR` necesita ver una ficha sin relación de tratamiento directa y sin que el paciente haya otorgado consentimiento `HEALTH_NETWORK` (por ejemplo, ante una supervisión clínica, un incidente o una auditoría interna), tiene una vía separada de acceso excepcional. A diferencia del acceso normal:
+
+- Exige un **motivo obligatorio**, que queda en la bitácora de auditoría (`overrideReason`) junto con la acción.
+- Solo está disponible cuando el acceso normal realmente estaría bloqueado — si el `SUPERVISOR` ya tendría acceso por otra vía (dueño de la ficha, o consentimiento ya otorgado), el sistema rechaza el uso de esta vía para no restarle valor probatorio al registro de auditoría.
+- No es un bypass silencioso: si la escritura de auditoría falla, el acceso se corta en vez de otorgarse igual.
 
 > 📝 Observaciones UX: (¿el menú realmente oculta las opciones que no te corresponden, o solo bloquea al hacer clic?)
 >
@@ -62,9 +70,7 @@ Cada una se otorga o revoca por separado. Al registrar cualquier consentimiento,
 
 Importante: revocar un consentimiento **no borra el evento anterior**. El historial completo (otorgamientos y revocaciones) queda visible siempre — es un registro tipo bitácora, no un simple check on/off.
 
-> ⚠️ **Gap confirmado entre el modelo legal y el código (verificado 2026-07-18)**: el estado de los tres consentimientos (`TREATMENT`, `TELEMEDICINE`, `HEALTH_NETWORK`) es hoy **puramente informativo**. Se rastreó toda la cadena de acceso a datos de pacientes (`patients.service.ts findOne/findAll`, y `consultations`/`documents`/`reports`, que delegan el control de acceso al mismo `findOne`): el único chequeo real es `therapistId === userId` (o rol `DIRECTOR`/`ADMIN`/`COORDINATOR`). En ningún punto se consulta el estado de consentimiento antes de otorgar acceso. `reports.service.ts` sí lee el consentimiento, pero solo para imprimir "Firmado"/"Pendiente" en el PDF — después de que el acceso ya fue otorgado, y ni siquiera imprime el estado de `HEALTH_NETWORK` específicamente.
->
-> En la práctica: **revocar "Red de salud" no le bloquea el acceso a ningún terapeuta u otro profesional que ya tenga `therapistId` asignado o rol administrativo.** Si la Ley 21.719 exige que ese consentimiento condicione el acceso efectivo (no solo quede documentado en el ledger), este es un hallazgo de compliance real, no un detalle de UX — pendiente de decisión de producto sobre si corresponde abrir como issue.
+El consentimiento `HEALTH_NETWORK` **condiciona el acceso efectivo, no es solo informativo** (T6.4/T6.5, issues #51/#52): el terapeuta tratante (`therapistId`) siempre conserva acceso a su propia ficha por la relación de tratamiento directa (Ley 20.584), pero un `SUPERVISOR` sin esa relación pierde el acceso normal a la ficha en cuanto el consentimiento de Red de Salud se revoca — la única vía que le queda es el acceso excepcional auditado descrito más arriba, que deja motivo obligatorio en la bitácora. `ADMIN` no tiene acceso a fichas clínicas bajo ningún escenario, con o sin consentimiento.
 
 ### Eliminar una ficha
 

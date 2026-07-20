@@ -1,23 +1,40 @@
 # Umbral SpA — Sistema de Gestión Clínica
 
-Sistema de gestión de fichas clínicas para consulta psicológica, desarrollado para cumplir con la **Ley 20.584** (Derechos y Deberes de los Pacientes) y la **Ley 19.628** (Protección de la Vida Privada) de Chile.
+![CI](https://github.com/jackhorrordevscl/control-fichas/actions/workflows/ci.yml/badge.svg?branch=main)
+
+Sistema de gestión de fichas clínicas para consulta psicológica, desarrollado
+para cumplir con la **Ley 20.584** (Derechos y Deberes de los Pacientes), la
+**Ley 19.628** (Protección de la Vida Privada) y la **Ley 21.719** (nueva Ley
+de Protección de Datos Personales) de Chile.
+
+## Documentación relacionada
+
+- [`docs/manual-terapeutas.md`](docs/manual-terapeutas.md) — manual funcional
+  para terapeutas: primer acceso/MFA, roles, pacientes, consultas,
+  documentos, archivos compartidos y reportes PDF.
+- [`docs/caso-de-uso-testing.md`](docs/caso-de-uso-testing.md) — guía
+  narrativa de testing manual/UAT paso a paso para voluntarios que prueban la
+  app antes de que la usen pacientes reales.
+- [`docs/registro-actividades-tratamiento.md`](docs/registro-actividades-tratamiento.md) —
+  Registro de Actividades de Tratamiento (RAT, Ley 21.719): qué datos se
+  tratan, con qué finalidad, base legal y retención.
 
 ---
 
 ## Stack Tecnológico
 
 **Frontend**
-- React 18 + TypeScript
+- React 19 + TypeScript
 - Tailwind CSS
-- React Router v6
+- React Router v7
 - TanStack Query (React Query)
 - React Hook Form + Zod
 - Axios
 - Lucide React
 
 **Backend**
-- NestJS + TypeScript
-- PostgreSQL
+- NestJS 11 + TypeScript
+- PostgreSQL 16
 - Prisma ORM v6
 - JWT + Passport
 - Argon2 (hash de contraseñas)
@@ -29,18 +46,19 @@ Sistema de gestión de fichas clínicas para consulta psicológica, desarrollado
 
 ## Requisitos Previos
 
-- Node.js v20+
-- PostgreSQL 15+
+- Node.js v22+ (versión usada en CI; v20+ también funciona)
+- PostgreSQL 16 (en producción, Supabase gestiona la base — ver sección
+  [Producción](#producción-actual))
 - npm
 
 ---
 
-## Instalación
+## Instalación (desarrollo local)
 
 ### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/control-fichas.git
+git clone https://github.com/jackhorrordevscl/control-fichas.git
 cd control-fichas
 ```
 
@@ -58,6 +76,9 @@ ALTER USER umbral_user CREATEDB;
 \q
 ```
 
+> Alternativa: `./install.sh` automatiza estos pasos (Node, PostgreSQL,
+> creación de base, `.env`, dependencias y cron de backup) en Ubuntu/Debian.
+
 ### 3. Configurar el Backend
 
 ```bash
@@ -65,19 +86,17 @@ cd backend
 npm install --legacy-peer-deps
 ```
 
-Crea el archivo `.env` basándote en `.env.example`:
+Crea el archivo `.env` a partir de `.env.example`:
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Contenido del `.env`:
-
 ```env
 DATABASE_URL="postgresql://umbral_user:tu_password_seguro@localhost:5432/umbral_db"
 # En local (sin pooler) es la misma conexión que DATABASE_URL. En producción
-# con un pooler delante (ej. Supabase/PgBouncer), DIRECT_URL debe ser la
+# con un pooler delante (Supabase/PgBouncer), DIRECT_URL debe ser la
 # conexión directa, no la pooled — Prisma Migrate la necesita para funcionar.
 DIRECT_URL="postgresql://umbral_user:tu_password_seguro@localhost:5432/umbral_db"
 JWT_SECRET="cambia-este-secreto-en-produccion"
@@ -100,7 +119,8 @@ cd ../frontend
 npm install --legacy-peer-deps
 ```
 
-Si vas a usar en red local, edita `src/api/client.ts` y cambia la `baseURL` con la IP de tu servidor:
+Si vas a usar en red local, edita `src/api/client.ts` y cambia la `baseURL`
+con la IP de tu servidor:
 
 ```typescript
 baseURL: 'http://TU_IP:3001/api/v1',
@@ -131,7 +151,28 @@ Email:     admin@umbral.cl
 Password:  Umbral2024!
 ```
 
-> ⚠️ Cambia estas credenciales inmediatamente después de la primera instalación.
+> ⚠️ Cambia estas credenciales inmediatamente después de la primera
+> instalación. El usuario admin fuerza cambio de contraseña en su primer
+> login (`mustChangePassword`), pero eso solo protege si cambiás la clave
+> **antes** de que alguien más la use con el valor conocido.
+
+---
+
+## Producción actual
+
+El despliegue vigente corre en **Render** (backend + frontend) detrás de
+**Cloudflare**, con **Supabase** como base de datos gestionada (Postgres
+detrás de Supavisor/PgBouncer en modo transacción). Por eso:
+
+- `DATABASE_URL` en producción es la conexión **pooled** de Supabase (puerto
+  `6543`, `?pgbouncer=true`); `DIRECT_URL` es la conexión **directa** (puerto
+  `5432`) que necesita `prisma migrate` — ver el comentario en
+  `backend/prisma/schema.prisma`.
+- `TRUSTED_PROXY_HOPS=3` en producción (Render detrás de Cloudflare); en
+  local/sin CDN delante es `1`.
+- `RUN_MIGRATIONS=true` corre `prisma migrate deploy` de forma asíncrona
+  después de levantar el server, pensado para plataformas cuyo Start Command
+  no corre migraciones por su cuenta (caso Render) — ver `main.ts`.
 
 ---
 
@@ -149,11 +190,14 @@ control-fichas/
 │   │   │   ├── decorators/       # CurrentUser, Roles
 │   │   │   └── interceptors/     # Audit Interceptor
 │   │   ├── modules/
-│   │   │   ├── auth/             # Login, JWT, MFA
-│   │   │   ├── patients/         # CRUD de pacientes
-│   │   │   ├── consultations/    # Registro clínico
+│   │   │   ├── auth/             # Login, JWT, MFA, cambio de contraseña forzado
+│   │   │   ├── patients/         # CRUD, consentimientos e historial de pacientes
+│   │   │   ├── consultations/    # Registro clínico versionado
+│   │   │   ├── documents/        # Documentos adjuntos por paciente
+│   │   │   ├── users/            # Gestión de usuarios (ADMIN/SUPERVISOR/COORDINATOR)
 │   │   │   ├── reports/          # Generación de PDF
-│   │   │   └── audit/            # Bitácora inmutable
+│   │   │   └── audit/            # Bitácora inmutable (interceptor global)
+│   │   ├── shared-files/         # Biblioteca interna (plantillas, protocolos)
 │   │   └── prisma/               # Servicio Prisma
 │   └── .env.example
 ├── frontend/
@@ -162,6 +206,7 @@ control-fichas/
 │       ├── context/              # AuthContext
 │       ├── components/           # Layout, Sidebar
 │       └── pages/                # Login, Dashboard, Pacientes, Consultas, Seguridad
+├── docs/                         # Manual de uso, caso de testing, RAT
 ├── backups/
 │   └── backup.sh                 # Script de backup automático
 └── README.md
@@ -174,21 +219,39 @@ control-fichas/
 ### Autenticación y Seguridad
 - Login con email y contraseña (hash Argon2)
 - Tokens JWT con expiración configurable
-- MFA opcional con TOTP (compatible con Google Authenticator y Authy)
+- MFA obligatorio para roles administrativos, opcional para el resto (TOTP,
+  compatible con Google Authenticator y Authy)
+- Cambio de contraseña forzado en el primer login del admin semilla
 - Guards de autenticación y control de roles (RBAC)
+- Rate limiting en login (`@nestjs/throttler`)
 - Headers HTTP seguros con Helmet.js
 
 ### Gestión de Pacientes (Ley 20.584)
 - Ficha completa con datos de identificación, contacto de emergencia y red de salud
-- Registro de consentimiento informado y acuerdo de telemedicina
+- Consentimiento granular por finalidad (`TREATMENT`, `TELEMEDICINE`,
+  `HEALTH_NETWORK`) como ledger append-only (Ley 21.719)
+- Acceso a fichas condicionado a consentimiento vigente y rol; acceso
+  excepcional de `SUPERVISOR` sin consentimiento `HEALTH_NETWORK`, siempre
+  con motivo auditado
 - Soft delete — los registros nunca se eliminan físicamente
-- Búsqueda por nombre o RUT
+- Búsqueda por nombre o RUT, historial de cambios (`PatientHistory`)
 
 ### Registro Clínico
 - Registro cronológico de sesiones con fecha y hora automática
 - Campos: motivo de consulta, intervención, acuerdos y próxima sesión
 - Soporte para sesiones presenciales y telemedicina
-- Sistema de versionado legal — las correcciones crean nuevas versiones sin alterar el original
+- Sistema de versionado legal — las correcciones crean nuevas versiones sin
+  alterar el original (`ConsultationHistory`)
+
+### Documentos y Archivos
+- Documentos clínicos por paciente (consentimiento informado, informes,
+  otros), PDF/imágenes hasta 10MB
+- Biblioteca interna de archivos compartidos (plantillas, protocolos,
+  formularios) para todo el staff, no ligada a pacientes
+
+### Gestión de Usuarios
+- CRUD de usuarios reservado a `ADMIN`, `SUPERVISOR` y `COORDINATOR`
+- Soft delete de usuarios
 
 ### Exportación PDF
 - Generación de ficha clínica completa en PDF
@@ -196,38 +259,52 @@ control-fichas/
 - Pie de página con referencia a Ley 20.584 y custodia obligatoria de 15 años
 
 ### Auditoría (Bitácora Inmutable)
-- Registro automático de todas las acciones del sistema
-- Campos: usuario, acción, recurso, IP, user-agent y timestamp
+- Registro automático de todas las acciones del sistema vía interceptor global
+- Campos: usuario, acción, recurso, IP, user-agent, timestamp y motivo de
+  acceso excepcional (`overrideReason`) cuando aplica
 - Tabla append-only — ningún registro puede modificarse ni eliminarse
 
 ### Backups Automáticos
 - Script de backup diario programado vía cron (2:00 AM)
-- Compresión gzip + cifrado AES-256 de los respaldos (nunca se escribe un volcado sin cifrar a disco)
+- Compresión gzip + cifrado AES-256 de los respaldos (nunca se escribe un
+  volcado sin cifrar a disco)
 - Credenciales de base de datos vía `.pgpass`, nunca hardcodeadas en el script
-- Rotación operativa de 30 días **separada** de un archivo de custodia legal mensual que nunca se borra (Ley 20.584: 15 años)
-- Segunda copia local en un dispositivo físico distinto (NAS) — copia offsite real todavía pendiente de definir proveedor
-- Log de ejecución en `backups/backup.log`
+- Rotación operativa de 30 días **separada** de un archivo de custodia legal
+  mensual que nunca se borra (Ley 20.584: 15 años)
+- Segunda copia local en un dispositivo físico distinto (NAS) — copia
+  offsite real todavía pendiente de definir proveedor
 
 ---
 
 ## API Endpoints
 
+Todas las rutas usan el prefijo global `/api/v1`.
+
 ### Autenticación
 ```
 POST /api/v1/auth/login
 POST /api/v1/auth/mfa/verify
-POST /api/v1/auth/mfa/generate  🔒
-POST /api/v1/auth/mfa/enable    🔒
-POST /api/v1/auth/mfa/disable   🔒
+POST /api/v1/auth/mfa/generate         🔒
+POST /api/v1/auth/mfa/enable           🔒
+POST /api/v1/auth/mfa/disable          🔒
+POST /api/v1/auth/mfa/setup/begin      (setupToken)
+POST /api/v1/auth/mfa/setup/confirm    (setupToken)
+POST /api/v1/auth/password/change      (passwordChangeToken)
 ```
 
 ### Pacientes
 ```
-GET    /api/v1/patients         🔒
-POST   /api/v1/patients         🔒
-GET    /api/v1/patients/:id     🔒
-PATCH  /api/v1/patients/:id     🔒
-DELETE /api/v1/patients/:id     🔒
+POST   /api/v1/patients                        🔒
+GET    /api/v1/patients                        🔒
+GET    /api/v1/patients/by-rut/:rut            🔒 SUPERVISOR
+GET    /api/v1/patients/:id/history            🔒
+GET    /api/v1/patients/:id                    🔒
+PATCH  /api/v1/patients/:id                    🔒
+DELETE /api/v1/patients/:id                    🔒
+POST   /api/v1/patients/:id/consents           🔒
+GET    /api/v1/patients/:id/consents/status    🔒
+GET    /api/v1/patients/:id/consents           🔒
+POST   /api/v1/patients/:id/access-override    🔒 SUPERVISOR
 ```
 
 ### Consultas
@@ -236,6 +313,32 @@ POST  /api/v1/consultations                        🔒
 GET   /api/v1/consultations/patient/:patientId     🔒
 GET   /api/v1/consultations/:id                    🔒
 PATCH /api/v1/consultations/:id/correct            🔒
+```
+
+### Documentos
+```
+POST /api/v1/documents/upload             🔒 (multipart, PDF/imagen, máx. 10MB)
+GET  /api/v1/documents/patient/:patientId 🔒
+GET  /api/v1/documents/:id/download       🔒
+```
+
+### Usuarios
+```
+GET    /api/v1/users        🔒 ADMIN/SUPERVISOR/COORDINATOR
+GET    /api/v1/users/:id    🔒 ADMIN/SUPERVISOR/COORDINATOR
+POST   /api/v1/users        🔒 ADMIN/SUPERVISOR/COORDINATOR
+PATCH  /api/v1/users/:id    🔒 ADMIN/SUPERVISOR/COORDINATOR
+DELETE /api/v1/users/:id    🔒 ADMIN/SUPERVISOR/COORDINATOR
+```
+
+### Archivos compartidos
+```
+GET    /api/v1/shared-files              🔒
+GET    /api/v1/shared-files/:id          🔒
+GET    /api/v1/shared-files/:id/download 🔒
+POST   /api/v1/shared-files/upload       🔒
+PATCH  /api/v1/shared-files/:id          🔒
+DELETE /api/v1/shared-files/:id          🔒
 ```
 
 ### Reportes
@@ -306,6 +409,13 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass file:"$HOME/.umbral_backup_passphrase"
 | Derecho del paciente a su ficha | Exportación PDF bajo demanda |
 | Inalterabilidad de registros | Versionado en consultas + soft delete en pacientes |
 | Bitácora de accesos | Audit Log inmutable con registro de todas las acciones |
+| Consentimiento granular por finalidad (Ley 21.719) | Ledger append-only `PatientConsent` por `TREATMENT`/`TELEMEDICINE`/`HEALTH_NETWORK` |
+| Acceso excepcional auditado | `SUPERVISOR` puede acceder sin consentimiento `HEALTH_NETWORK` vigente, con motivo obligatorio registrado |
+| Inventario de tratamiento (RAT) | Ver [`docs/registro-actividades-tratamiento.md`](docs/registro-actividades-tratamiento.md) |
+
+Pendiente de proveedor externo (no depende de código): firma electrónica
+avanzada Ley 19.799 y copia offsite real de backups — ver issues del
+proyecto.
 
 ---
 
@@ -319,6 +429,8 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass file:"$HOME/.umbral_backup_passphrase"
 | `JWT_EXPIRES_IN` | Tiempo de expiración del token | `8h` |
 | `MFA_APP_NAME` | Nombre que aparece en la app autenticadora | `Umbral SpA` |
 | `FRONTEND_URL` | URL del frontend (para CORS) | `http://localhost:5173` |
+| `PORT` | Puerto del backend | `3001` (default) |
+| `NODE_ENV` | Entorno de ejecución; en `production` exige `JWT_SECRET` fuerte y distinto del valor de ejemplo | `production` |
 | `RUN_MIGRATIONS` | Si es `true`, corre `prisma migrate deploy` al arrancar (ver `main.ts`) | `false` |
 | `TRUSTED_PROXY_HOPS` | Cantidad de proxies confiables delante de la app, para identificar la IP real del cliente en el rate-limit de login (ver comentario en `auth.module.ts`) | `1` (un único proxy de edge, sin CDN delante). Con Render detrás de Cloudflare (deploy actual): `3` |
 | `SEED_ADMIN_EMAIL` | Email del admin creado por `prisma db seed` (`npm run seed`) | `admin@umbral.cl` (default, ver `prisma/seed-admin.defaults.ts`) |
