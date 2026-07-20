@@ -274,8 +274,10 @@ control-fichas/
 - Credenciales de base de datos vía `.pgpass`, nunca hardcodeadas en el script
 - Rotación operativa de 30 días **separada** de un archivo de custodia legal
   mensual que nunca se borra (Ley 20.584: 15 años)
-- Segunda copia local en un dispositivo físico distinto (NAS) — copia
-  offsite real todavía pendiente de definir proveedor
+- Segunda copia local en un dispositivo físico distinto (NAS)
+- Copia offsite real vía Backblaze B2 + `rclone` (T3.3, issue #17) — proveedor
+  ya definido, configuración de infra pendiente (ver sección
+  [Configuración de Backups](#configuración-de-backups))
 
 ---
 
@@ -375,7 +377,32 @@ Variables opcionales (todas tienen un default razonable si no se configuran — 
 | `BACKUP_DIR` | Backups operativos, rotan cada `RETENTION_DAYS` |
 | `ARCHIVE_DIR` | Custodia legal — nunca se borra automáticamente |
 | `NAS_DIR` | Segunda copia local en un dispositivo físico distinto (regla 3-2-1) |
-| `OFFSITE_UPLOAD_CMD` | Hook para subir a un destino offsite real (S3/B2/rclone) — pendiente de definir proveedor |
+| `OFFSITE_UPLOAD_CMD` | Hook para subir a un destino offsite real (T3.3, issue #17) |
+
+### Copia offsite real (Backblaze B2 + rclone)
+
+Proveedor elegido: **Backblaze B2** (10 GB gratis de forma permanente, no
+trial; el backup ya llega cifrado con AES-256 antes de subirse, así que B2
+nunca tiene acceso al contenido en claro). Se descartó usar hosting propio
+existente (ej. HostGator) porque su Acceptable Use Policy prohíbe
+explícitamente usar el espacio de shared hosting como *"offsite storage of
+electronic files"* — ver la discusión completa en el issue #17.
+
+1. Crear cuenta gratuita en Backblaze B2 y un bucket **privado**.
+2. Instalar [`rclone`](https://rclone.org) en el servidor y configurar el
+   remote con el Application Key de B2:
+   ```bash
+   rclone config
+   ```
+3. Setear `OFFSITE_UPLOAD_CMD` en el entorno del servidor (variable de
+   infra, **nunca en el repo**):
+   ```bash
+   OFFSITE_UPLOAD_CMD="rclone copy {} b2remote:mi-bucket/umbral/"
+   ```
+   `backup.sh` reemplaza `{}` por la ruta del backup cifrado y ejecuta el
+   comando tal cual.
+4. Verificar al menos una restauración real desde la copia offsite antes de
+   dar por cerrado el punto.
 
 Activarlo:
 
@@ -417,8 +444,9 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass file:"$HOME/.umbral_backup_passphrase"
 | Inventario de tratamiento (RAT) | Ver [`docs/registro-actividades-tratamiento.md`](docs/registro-actividades-tratamiento.md) |
 
 Pendiente de proveedor externo (no depende de código): firma electrónica
-avanzada Ley 19.799 y copia offsite real de backups — ver issues del
-proyecto.
+avanzada Ley 19.799 (issues #24-#26). La copia offsite de backups ya tiene
+proveedor definido (Backblaze B2 + `rclone`) — ver
+[Configuración de Backups](#configuración-de-backups) e issue #17.
 
 ---
 
