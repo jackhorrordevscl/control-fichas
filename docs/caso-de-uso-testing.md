@@ -16,7 +16,7 @@ Vas a encarnar a una terapeuta ficticia. Segui la historia paso a paso, en el or
 
 ### 9:00 — Llegás a trabajar
 
-Iniciás sesión en Umbral. *(Si tu cuenta es `ADMIN`/`DIRECTOR`, te va a pedir activar MFA la primera vez — segui el proceso con tu app autenticadora.)*
+Iniciás sesión en Umbral. *(Si tu cuenta es `ADMIN`/`SUPERVISOR`, te va a pedir activar MFA la primera vez — segui el proceso con tu app autenticadora.)*
 
 > 📝 Anotá: ¿el login se sintió confuso en algún paso? ¿el mensaje de error, si te equivocaste de contraseña a propósito, te dijo algo útil?
 
@@ -78,10 +78,11 @@ Cerrá sesión manualmente (no esperes a que expire sola). Volvé a entrar. Conf
 
 ## Si tenés una cuenta de rol distinto a THERAPIST
 
-Si además te dieron una segunda cuenta (`COORDINATOR`, `DIRECTOR` o `ADMIN`), repetí esta parte:
+Si además te dieron una segunda cuenta (`COORDINATOR`, `SUPERVISOR` o `ADMIN`), repetí esta parte:
 
 - Entrá con esa segunda cuenta e intentá ver la ficha de Antonia o Jorge, que creaste con la cuenta de `THERAPIST`.
-- Fijate qué pasa: ¿te deja ver todo, te bloquea, o depende del rol?
+- Fijate qué pasa: ¿te deja ver todo, te bloquea, o depende del consentimiento "Red de Salud" que le diste (o no) a ese paciente? Con `SUPERVISOR`, probá también qué pasa si el paciente NO tiene ese consentimiento otorgado — deberías ver una opción de "acceso excepcional" que te pide escribir un motivo.
+- `ADMIN` no debería poder ver la ficha bajo ningún caso — si te deja entrar, es un bug, avisalo.
 
 > 📝 Anotá exactamente qué rol vio qué — esto es lo más sensible de toda la app (quién puede ver los datos de quién), así que cualquier cosa que te resulte "raro" acá, avisala aunque no estés seguro de si es un bug.
 
