@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { RecordConsentDto } from './dto/record-consent.dto';
@@ -21,7 +22,10 @@ function emptyConsentStatus(): ConsentStatusMap {
 
 @Injectable()
 export class PatientsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditService: AuditService,
+  ) {}
 
   // T6.4 (issue #51): ADMIN no tiene acceso a datos clínicos bajo ningún
   // escenario -- ni siquiera pudiendo crear un paciente y quedar como su
@@ -181,18 +185,57 @@ export class PatientsService {
   // relación de tratamiento directa y sin consentimiento HEALTH_NETWORK
   // vigente -- pensada para supervisión clínica legítima (incidentes,
   // auditorías internas, denuncias) que findOne bloquearía de otro modo.
-  // El motivo queda auditado por AuditInterceptor (lee `overrideReason` del
-  // body de forma genérica, ver audit.interceptor.ts), no acá: este método
-  // no hace su propio log explícito para no duplicar la fila que el
-  // interceptor ya genera para cualquier request autenticado.
   //
   // No repite el chequeo de ADMIN/COORDINATOR/THERAPIST de findOne a
   // propósito: el guard del controller (@Roles('SUPERVISOR')) ya garantiza
   // que solo SUPERVISOR llega acá. Si algún otro rol necesitara esta vía en
   // el futuro, el chequeo de rol tendría que agregarse acá también, no solo
   // en el guard.
-  async accessOverride(id: string) {
+  async accessOverride(
+    id: string,
+    userId: string,
+    userRole: string,
+    overrideReason: string,
+  ) {
+    // Verifica que el override realmente correspondía: si findOne ya le
+    // daría acceso normal a este userId (dueño, o SUPERVISOR con
+    // consentimiento ya otorgado), no se otorga por esta vía -- una fila de
+    // auditoría con motivo en una ficha a la que igual se accedía sin
+    // excepción le resta valor probatorio al trail entero ante una revisión
+    // real. NotFoundException se deja propagar tal cual (404, no 403): el
+    // problema ahí no es el gate de consentimiento.
+    let alreadyAccessible = true;
+    try {
+      await this.findOne(id, userId, userRole);
+    } catch (err) {
+      if (err instanceof NotFoundException) throw err;
+      alreadyAccessible = false;
+    }
+    if (alreadyAccessible) {
+      throw new ForbiddenException(
+        'Ya tenés acceso normal a esta ficha; el acceso excepcional no corresponde acá',
+      );
+    }
+
     const { patient, consents } = await this.fetchPatientWithConsents(id);
+
+    // Escritura de auditoría SÍNCRONA y bloqueante, a diferencia del log
+    // automático de AuditInterceptor (fail-open por diseño: la atención al
+    // paciente no depende de la disponibilidad del log, ver
+    // audit.interceptor.ts). Acá el cálculo es al revés -- esta acción ES
+    // saltarse un gate de consentimiento, así que sin trail persistido no
+    // hay excepción auditada, solo un bypass silencioso. Si falla, se corta
+    // el acceso en vez de entregarlo igual.
+    await this.auditService.log({
+      userId,
+      action: 'VIEW',
+      resource: 'patient',
+      resourceId: id,
+      detail:
+        'Acceso excepcional de SUPERVISOR sin consentimiento HEALTH_NETWORK (T6.5, issue #52)',
+      overrideReason,
+    });
+
     return { ...patient, consents };
   }
 

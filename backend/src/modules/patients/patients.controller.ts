@@ -109,16 +109,23 @@ export class PatientsController {
 
   // T6.5 (issue #52): única vía para que SUPERVISOR acceda a una ficha sin
   // consentimiento HEALTH_NETWORK vigente. @Roles('SUPERVISOR') es lo que
-  // realmente impide que otro rol la use -- el body con `overrideReason`
-  // (AccessOverrideDto, mínimo 10 caracteres) queda auditado por
-  // AuditInterceptor de forma genérica, no en este método.
+  // realmente impide que otro rol la use. El motivo (AccessOverrideDto,
+  // mínimo 10 caracteres, trimeado) queda auditado de forma síncrona y
+  // bloqueante dentro del service -- no delegado por completo en el log
+  // automático de AuditInterceptor, que es fail-open por diseño.
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPERVISOR')
   @Post(':id/access-override')
   accessOverride(
     @Param('id') id: string,
-    @Body() _dto: AccessOverrideDto,
+    @Body() dto: AccessOverrideDto,
+    @CurrentUser() user: any,
   ) {
-    return this.patientsService.accessOverride(id);
+    return this.patientsService.accessOverride(
+      id,
+      user.id,
+      user.role,
+      dto.overrideReason,
+    );
   }
 }

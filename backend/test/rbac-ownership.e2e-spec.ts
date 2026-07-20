@@ -673,6 +673,28 @@ describe('RBAC ownership guard (e2e)', () => {
           .expect(400);
       });
 
+      it('rechaza un motivo de solo espacios (400) -- el DTO trimea antes de validar', () => {
+        return request(app.getHttpServer())
+          .post(`/api/v1/patients/${overridePatientId}/access-override`)
+          .set('Authorization', `Bearer ${supervisorToken}`)
+          .send({ overrideReason: '              ' })
+          .expect(400);
+      });
+
+      it('sobre una ficha a la que SUPERVISOR ya tiene acceso normal recibe 403, no la otorga igual', () => {
+        // Reutiliza el `patientId` compartido del describe de T6.4: a esta
+        // altura del archivo ya tiene HEALTH_NETWORK otorgado (ver arriba),
+        // así que SUPERVISOR accede normal ahí -- el acceso excepcional no
+        // corresponde y no debería quedar registrado como si lo fuera.
+        return request(app.getHttpServer())
+          .post(`/api/v1/patients/${patientId}/access-override`)
+          .set('Authorization', `Bearer ${supervisorToken}`)
+          .send({
+            overrideReason: 'Intento de override sobre ficha ya accesible',
+          })
+          .expect(403);
+      });
+
       it('con motivo válido accede (2xx), sin dejar la ruta normal abierta, y queda auditado', async () => {
         const reason = 'Revisión por denuncia recibida, T6.5 issue #52';
 

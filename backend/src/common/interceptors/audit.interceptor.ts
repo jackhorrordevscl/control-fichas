@@ -24,7 +24,15 @@ export class AuditInterceptor implements NestInterceptor {
 
     const method = request.method;
     const url = request.url;
-    const resourceId = request.params?.id ?? request.params?.patientId ?? 'N/A';
+    // T6.5 (issue #52): GET /patients/by-rut/:rut no tiene :id ni
+    // :patientId -- sin este fallback, cualquier búsqueda por RUT quedaba
+    // auditada con resourceId='N/A', perdiendo trazabilidad de qué RUT se
+    // consultó.
+    const resourceId =
+      request.params?.id ??
+      request.params?.patientId ??
+      request.params?.rut ??
+      'N/A';
     const ipAddress = request.ip;
     const userAgent = request.headers['user-agent'];
 
