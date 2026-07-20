@@ -10,8 +10,6 @@ import {
   Body,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
 import type { Response } from 'express';
 import { DocumentsService } from './documents.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -22,20 +20,18 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class DocumentsController {
   constructor(private documentsService: DocumentsService) {}
 
+  // T8.1 (issue #58): sin `storage` explícito, FileInterceptor usa memoria
+  // (no diskStorage) -- el archivo llega en `file.buffer` sin tocar el disco,
+  // así DocumentsService puede cifrarlo antes de escribirlo.
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/documents',
-        filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
-        },
-      }),
       fileFilter: (req, file, cb) => {
         // Solo acepta PDFs e imágenes
-        if (file.mimetype === 'application/pdf' ||
-            file.mimetype.startsWith('image/')) {
+        if (
+          file.mimetype === 'application/pdf' ||
+          file.mimetype.startsWith('image/')
+        ) {
           cb(null, true);
         } else {
           cb(new Error('Solo se permiten archivos PDF e imágenes'), false);
@@ -73,8 +69,16 @@ export class DocumentsController {
     @CurrentUser() user: any,
     @Res() res: Response,
   ) {
-    const doc = await this.documentsService.getDocument(id, user.id, user.role);
-    const filePath = join(process.cwd(), doc.storagePath);
-    res.download(filePath, doc.fileName);
+    const { doc, buffer } = await this.documentsService.getDecryptedFile(
+      id,
+      user.id,
+      user.role,
+    );
+    res.set({
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(doc.fileName)}"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 }

@@ -68,6 +68,9 @@ JWT_SECRET="umbral-jwt-secret-cambiar-en-produccion-2024"
 JWT_EXPIRES_IN="8h"
 MFA_APP_NAME="Umbral SpA"
 FRONTEND_URL="http://localhost:5173"
+# Clave de cifrado de documentos (T8.1) -- generá la tuya con:
+# openssl rand -base64 32
+DOCUMENT_ENCRYPTION_KEY="+rPRh0H2ayZ4yAIjhOWbvOghetuNtScBP8g2VgNuBik="
 EOL
   echo "✅ .env creado"
 else
