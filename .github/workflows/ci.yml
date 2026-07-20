@@ -35,6 +35,7 @@ jobs:
       JWT_SECRET: ci-only-jwt-secret-never-used-outside-github-actions
       JWT_EXPIRES_IN: 8h
       MFA_APP_NAME: Umbral SpA (CI)
+      DOCUMENT_ENCRYPTION_KEY: MoDh8f3G8V0hR0m5wq8V0hR0m5wq8V0hR0m5wq8V0h8=
       SEED_ADMIN_EMAIL: admin@umbral.cl
       SEED_ADMIN_PASSWORD: Umbral2024!
     steps:

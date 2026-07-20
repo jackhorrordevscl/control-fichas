@@ -1,16 +1,24 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PatientsService } from '../patients/patients.service';
+import { DocumentEncryptionService } from './document-encryption.service';
 import * as path from 'path';
 import * as fs from 'fs';
+
+const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'documents');
 
 @Injectable()
 export class DocumentsService {
   constructor(
     private prisma: PrismaService,
     private patientsService: PatientsService,
+    private encryption: DocumentEncryptionService,
   ) {}
 
+  // T8.1 (issue #58): el archivo llega en memoria (memoryStorage en el
+  // controller, no diskStorage) para poder cifrarlo con AES-256-GCM antes de
+  // que exista cualquier bytes sin cifrar en disco. `storagePath` sigue
+  // siendo relativo a `process.cwd()`, igual que antes con diskStorage.
   async uploadDocument(
     patientId: string,
     userId: string,
@@ -18,15 +26,18 @@ export class DocumentsService {
     file: Express.Multer.File,
     type: string,
   ) {
-    try {
-      // Lanza NotFoundException/ForbiddenException si el paciente no existe
-      // o el usuario no tiene acceso a él
-      await this.patientsService.findOne(patientId, userId, userRole);
-    } catch (err) {
-      // Elimina el archivo subido si la validación falla
-      fs.unlinkSync(file.path);
-      throw err;
-    }
+    // Lanza NotFoundException/ForbiddenException si el paciente no existe
+    // o el usuario no tiene acceso a él -- se valida ANTES de escribir nada
+    // a disco, así no queda un archivo huérfano que limpiar.
+    await this.patientsService.findOne(patientId, userId, userRole);
+
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const storedName = `${uniqueSuffix}${path.extname(file.originalname)}.enc`;
+    const storagePath = path.join('uploads', 'documents', storedName);
+
+    const encrypted = this.encryption.encrypt(file.buffer);
+    fs.writeFileSync(path.join(process.cwd(), storagePath), encrypted);
 
     return this.prisma.patientDocument.create({
       data: {
@@ -34,9 +45,19 @@ export class DocumentsService {
         uploadedBy: userId,
         type: type as any,
         fileName: file.originalname,
-        storagePath: file.path,
+        storagePath,
       },
     });
+  }
+
+  // Devuelve el contenido ya descifrado, listo para servir. La validación de
+  // acceso ya la hace `getDocument` (vía `patientsService.findOne`).
+  async getDecryptedFile(id: string, userId: string, userRole: string) {
+    const doc = await this.getDocument(id, userId, userRole);
+    const encrypted = fs.readFileSync(
+      path.join(process.cwd(), doc.storagePath),
+    );
+    return { doc, buffer: this.encryption.decrypt(encrypted) };
   }
 
   async findByPatient(patientId: string, userId: string, userRole: string) {

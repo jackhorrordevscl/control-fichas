@@ -103,6 +103,9 @@ JWT_SECRET="cambia-este-secreto-en-produccion"
 JWT_EXPIRES_IN="8h"
 MFA_APP_NAME="Umbral SpA"
 FRONTEND_URL="http://localhost:5173"
+# Clave de cifrado de documentos (T8.1) -- generá la tuya con:
+# openssl rand -base64 32
+DOCUMENT_ENCRYPTION_KEY="+rPRh0H2ayZ4yAIjhOWbvOghetuNtScBP8g2VgNuBik="
 ```
 
 Ejecutar migraciones y seed inicial:
@@ -429,6 +432,7 @@ proyecto.
 | `JWT_EXPIRES_IN` | Tiempo de expiración del token | `8h` |
 | `MFA_APP_NAME` | Nombre que aparece en la app autenticadora | `Umbral SpA` |
 | `FRONTEND_URL` | URL del frontend (para CORS) | `http://localhost:5173` |
+| `DOCUMENT_ENCRYPTION_KEY` | Clave AES-256 (base64, 32 bytes) para cifrar documentos de pacientes en reposo (T8.1) | Generar con `openssl rand -base64 32` |
 | `PORT` | Puerto del backend | `3001` (default) |
 | `NODE_ENV` | Entorno de ejecución; en `production` exige `JWT_SECRET` fuerte y distinto del valor de ejemplo | `production` |
 | `RUN_MIGRATIONS` | Si es `true`, corre `prisma migrate deploy` al arrancar (ver `main.ts`) | `false` |
@@ -437,6 +441,8 @@ proyecto.
 | `SEED_ADMIN_PASSWORD` | Contraseña inicial del admin creado por el seed | Ver advertencia abajo — **nunca dejar el default en un entorno alcanzable** |
 
 > ⚠️ Si el comando de arranque del hosting ya corre `prisma migrate deploy` antes de iniciar el server (recomendado), **no** setees `RUN_MIGRATIONS=true` también — no rompe nada (la migración es idempotente), pero la corre dos veces innecesariamente.
+
+> 🔒 **El `DOCUMENT_ENCRYPTION_KEY` de ejemplo de arriba es público** (está en un repo público) — igual que con `JWT_SECRET`, en producción el arranque falla si detecta ese valor exacto o cualquier clave que no decodifique a 32 bytes en base64. Generá una propia con `openssl rand -base64 32` antes de desplegar.
 
 > 🔒 **`SEED_ADMIN_PASSWORD` es pública si no la overrideás.** El default (`prisma/seed-admin.defaults.ts`) está commiteado en un repo público — cualquiera lo puede leer. La cuenta admin fuerza cambio de contraseña en su primer login (`mustChangePassword`), pero eso solo protege si el operador cambia la clave *antes* de que alguien más la use con la contraseña conocida: quien loguee primero con el default se queda con el `passwordChangeToken` y puede tomar la cuenta. En local/CI el default está bien (nadie más tiene acceso a esa base). En **cualquier entorno alcanzable desde afuera** (staging, producción), seteá `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` a valores propios antes de correr el seed por primera vez.
 
